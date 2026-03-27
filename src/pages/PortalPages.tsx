@@ -394,11 +394,91 @@ export function RegisterPage() {
 export function AdminDashboardPage() {
   return (
     <SidebarLayout title="Admin Dashboard" role="Admin Portal" items={adminSidebar}>
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/90">Daily Operations</p>
+            <h3 className="mt-2 text-2xl font-semibold">Your team is performing above target</h3>
+            <p className="mt-2 max-w-2xl text-sm text-slate-200">
+              18 jobs are scheduled for today and the morning crew has already completed 7. Keep momentum by prioritizing the
+              pending quote requests before 2:00 PM.
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-200">Service Quality Score</p>
+            <p className="mt-1 text-3xl font-semibold">9.4/10</p>
+            <p className="text-xs text-emerald-200">+0.6 from last week</p>
+          </div>
+        </div>
+      </section>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Customers" value="1,284" icon={FiUsers} trend="+9.2% this month" />
         <StatCard label="Active Bookings" value="86" icon={FiCalendar} trend="+14.3% this week" />
         <StatCard label="Quote Requests" value="43" icon={FiMessageSquare} trend="+4.1% today" />
         <StatCard label="Completion Rate" value="97%" icon={FiPercent} trend="Top 5% in region" />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-slate-900">Weekly Performance Snapshot</h3>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">+12% growth</span>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Jobs completed vs. newly requested bookings.</p>
+          <div className="mt-5 space-y-4">
+            {[
+              { day: 'Mon', completed: 86, requested: 68 },
+              { day: 'Tue', completed: 92, requested: 72 },
+              { day: 'Wed', completed: 79, requested: 75 },
+              { day: 'Thu', completed: 98, requested: 80 },
+              { day: 'Fri', completed: 88, requested: 74 },
+            ].map((item) => (
+              <div key={item.day} className="grid grid-cols-[42px_1fr_auto] items-center gap-3">
+                <span className="text-sm font-medium text-slate-600">{item.day}</span>
+                <div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <div className="h-2 rounded-full bg-slate-900" style={{ width: `${item.completed}%` }} />
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-slate-100">
+                    <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${item.requested}%` }} />
+                  </div>
+                </div>
+                <span className="text-xs text-slate-500">{item.completed} / {item.requested}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
+              Completed
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              Requested
+            </span>
+          </div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Priority Queue</h3>
+          <p className="mt-1 text-sm text-slate-500">Action these items to keep service levels high.</p>
+          <div className="mt-4 space-y-3">
+            {[
+              { title: 'Overdue quote approvals', detail: '6 requests waiting over 24h', tone: 'bg-rose-50 text-rose-700' },
+              { title: 'Technician assignment', detail: '4 bookings need crew allocation', tone: 'bg-amber-50 text-amber-700' },
+              { title: 'Customer follow-up', detail: '9 completed jobs need review request', tone: 'bg-emerald-50 text-emerald-700' },
+            ].map((task) => (
+              <div key={task.title} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-800">{task.title}</p>
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${task.tone}`}>Open</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{task.detail}</p>
+              </div>
+            ))}
+          </div>
+          <button className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+            Review Priority Queue
+          </button>
+        </article>
       </section>
       <section className="grid gap-4 lg:grid-cols-3">
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -424,6 +504,52 @@ export function AdminDashboardPage() {
             Open Quotes
             <FiArrowUpRight size={14} />
           </Link>
+        </article>
+      </section>
+      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
+          <div className="mt-4 space-y-4">
+            {[
+              'Daniel White approved quote #QT-509',
+              'Crew B completed booking #BK-1092',
+              'New customer Olivia Park created account',
+              'Gallery image "driveway-results.jpg" updated',
+            ].map((activity, index) => (
+              <div key={activity} className="flex gap-3">
+                <div className="mt-1 h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="text-sm text-slate-700">{activity}</p>
+                  <p className="text-xs text-slate-500">{index + 1} hour ago</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Today at a Glance</h3>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Site Visits</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">18</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Invoices Sent</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">11</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Crew Available</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">6</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Pending Calls</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">3</p>
+            </div>
+          </div>
+          <button className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600">
+            Open Operations Report
+            <FiArrowUpRight size={14} />
+          </button>
         </article>
       </section>
     </SidebarLayout>
