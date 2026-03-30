@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { ApiError, apiPost } from '../lib/api'
+import { clearSession, setSession, type AuthUser } from '../lib/authStorage'
 import type { IconType } from 'react-icons'
 import {
   FiArrowUpRight,
@@ -25,12 +27,14 @@ import {
   FiUsers,
   FiX,
 } from 'react-icons/fi'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 
 type SidebarItem = {
   label: string
   icon: IconType
   href: string
+  /** e.g. clear auth when logging out */
+  onNavigate?: () => void
 }
 
 type TableAction = {
@@ -54,7 +58,7 @@ const customerSidebar: SidebarItem[] = [
   { label: 'My Bookings', icon: FiCalendar, href: '/customer/bookings' },
   { label: 'My Quotes', icon: FiMessageSquare, href: '/customer/quotes' },
   { label: 'Settings', icon: FiSettings, href: '/customer/settings' },
-  { label: 'Logout', icon: FiLogOut, href: '/portal/login' },
+  { label: 'Logout', icon: FiLogOut, href: '/portal/login', onNavigate: () => clearSession() },
 ]
 
 const tableActions: TableAction[] = [
@@ -227,7 +231,10 @@ function SidebarLayout({
               <NavLink
                 key={item.label}
                 to={item.href}
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={() => {
+                  item.onNavigate?.()
+                  setMobileMenuOpen(false)
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
                     isActive ? 'bg-white/15 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
@@ -273,17 +280,61 @@ function SidebarLayout({
   )
 }
 
+function mapUser(u: { id: string; name: string; email: string; role: string }): AuthUser {
+  return {
+    id: String(u.id),
+    name: u.name,
+    email: u.email,
+    role: u.role === 'admin' ? 'admin' : 'customer',
+  }
+}
+
 export function LoginPage() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await apiPost<{ user: { id: string; name: string; email: string; role: string }; token: string }>(
+        '/api/auth/login',
+        { email: email.trim(), password },
+      )
+      const { user, token } = res.data
+      setSession(token, mapUser(user))
+      navigate(user.role === 'admin' ? '/admin/dashboard' : '/customer/dashboard', { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Sign in failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return authWrapper(
-    <form className="w-full max-w-md space-y-5">
+    <form className="w-full max-w-md space-y-5" onSubmit={handleSubmit}>
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Welcome Back</p>
         <h2 className="mt-2 text-3xl font-semibold text-white">Sign in to your account</h2>
       </div>
+      {error ? (
+        <p className="rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-100" role="alert">
+          {error}
+        </p>
+      ) : null}
       <label className="block">
         <span className="mb-2 block text-sm text-slate-300">Email Address</span>
         <input
           type="email"
+          name="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
           placeholder="you@company.com"
           className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
         />
@@ -294,6 +345,11 @@ export function LoginPage() {
           <FiLock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="password"
+            name="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
             placeholder="Enter password"
             className="w-full rounded-xl border border-white/15 bg-white/10 py-3 pl-10 pr-4 text-white placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
           />
@@ -308,17 +364,13 @@ export function LoginPage() {
           Forgot password?
         </button>
       </div>
-      <button type="button" className="w-full rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-3 font-semibold text-slate-950 transition hover:opacity-90">
-        Login
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-3 font-semibold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {loading ? 'Signing in…' : 'Login'}
       </button>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <Link to="/admin/dashboard" className="rounded-xl border border-white/20 px-3 py-2.5 text-center text-slate-200 transition hover:bg-white/10">
-          Enter Admin
-        </Link>
-        <Link to="/customer/dashboard" className="rounded-xl border border-white/20 px-3 py-2.5 text-center text-slate-200 transition hover:bg-white/10">
-          Enter Customer
-        </Link>
-      </div>
       <p className="text-center text-sm text-slate-300">
         New here?{' '}
         <Link to="/portal/register" className="font-semibold text-emerald-300 hover:text-emerald-200">
@@ -330,16 +382,61 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
+  const navigate = useNavigate()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await apiPost<{ user: { id: string; name: string; email: string; role: string }; token: string }>(
+        '/api/auth/register',
+        { name: name.trim(), email: email.trim(), password },
+      )
+      const { user, token } = res.data
+      setSession(token, mapUser(user))
+      navigate('/customer/dashboard', { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return authWrapper(
-    <form className="w-full max-w-md space-y-4">
+    <form className="w-full max-w-md space-y-4" onSubmit={handleSubmit}>
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Create Account</p>
         <h2 className="mt-2 text-3xl font-semibold text-white">Register your profile</h2>
       </div>
+      {error ? (
+        <p className="rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-100" role="alert">
+          {error}
+        </p>
+      ) : null}
       <label className="block">
         <span className="mb-2 block text-sm text-slate-300">Full Name</span>
         <input
           type="text"
+          name="name"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
           placeholder="John Smith"
           className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
         />
@@ -348,6 +445,11 @@ export function RegisterPage() {
         <span className="mb-2 block text-sm text-slate-300">Email</span>
         <input
           type="email"
+          name="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
           placeholder="you@example.com"
           className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
         />
@@ -356,16 +458,25 @@ export function RegisterPage() {
         <span className="mb-2 block text-sm text-slate-300">Phone Number</span>
         <input
           type="tel"
+          name="phone"
+          autoComplete="tel"
           placeholder="+44 7000 000000"
           className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
         />
+        <span className="mt-1 block text-xs text-slate-500">Optional — not stored on the server yet.</span>
       </label>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>
           <span className="mb-2 block text-sm text-slate-300">Password</span>
           <input
             type="password"
-            placeholder="Create password"
+            name="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            placeholder="At least 8 characters"
             className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
           />
         </label>
@@ -373,13 +484,22 @@ export function RegisterPage() {
           <span className="mb-2 block text-sm text-slate-300">Confirm Password</span>
           <input
             type="password"
+            name="confirmPassword"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
             placeholder="Repeat password"
             className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
           />
         </label>
       </div>
-      <button type="button" className="mt-2 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-semibold text-slate-950 transition hover:opacity-90">
-        Create Account
+      <button
+        type="submit"
+        disabled={loading}
+        className="mt-2 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-semibold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {loading ? 'Creating account…' : 'Create Account'}
       </button>
       <p className="text-center text-sm text-slate-300">
         Already have an account?{' '}
