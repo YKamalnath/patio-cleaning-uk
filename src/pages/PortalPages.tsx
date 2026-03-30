@@ -199,6 +199,7 @@ function SidebarLayout({
   children: React.ReactNode
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen w-full bg-slate-100">
@@ -270,7 +271,12 @@ function SidebarLayout({
                   className="w-full min-w-0 rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-slate-400"
                 />
               </label>
-              <button className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Quick Add</button>
+              <button
+                onClick={() => navigate(0)}
+                className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Page Refresh
+              </button>
             </div>
           </header>
           {children}
