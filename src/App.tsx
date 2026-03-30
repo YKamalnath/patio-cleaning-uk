@@ -33,7 +33,7 @@ function App() {
   return (
     <div className="bg-brand-slate text-slate-900">
       {!isPortalRoute ? <Header /> : null}
-      <main>
+      <main className={isPortalRoute ? 'w-full min-w-0' : undefined}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/about" element={<AboutPage />} />

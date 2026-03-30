@@ -197,7 +197,7 @@ function SidebarLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen w-full bg-slate-100">
       {mobileMenuOpen ? (
         <button
           type="button"
@@ -206,9 +206,9 @@ function SidebarLayout({
           onClick={() => setMobileMenuOpen(false)}
         />
       ) : null}
-      <div className="mx-auto grid max-w-[1500px] md:grid-cols-[300px_1fr]">
+      <div className="grid min-h-screen w-full min-w-0 grid-cols-1 gap-0 md:grid-cols-[minmax(260px,18rem)_minmax(0,1fr)] xl:grid-cols-[minmax(280px,19rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,20rem)_minmax(0,1fr)]">
         <aside
-          className={`fixed inset-y-0 left-0 z-40 w-[290px] border-r border-slate-200 bg-slate-950 px-6 py-7 text-slate-200 transition-transform duration-300 md:static md:w-auto md:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-40 w-[min(100vw-2rem,290px)] border-r border-slate-200 bg-slate-950 px-6 py-7 text-slate-200 transition-transform duration-300 md:static md:w-full md:min-w-0 md:max-w-none md:translate-x-0 ${
             mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -240,9 +240,9 @@ function SidebarLayout({
             ))}
           </nav>
         </aside>
-        <main className="space-y-6 p-5 md:p-8">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div>
+        <main className="min-w-0 max-w-full space-y-6 px-4 py-5 sm:px-6 md:px-8 md:py-8 2xl:space-y-8 2xl:px-12 2xl:py-10">
+          <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 2xl:p-6">
+            <div className="min-w-0 flex-1">
               <button
                 type="button"
                 className="mb-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 md:hidden"
@@ -252,18 +252,18 @@ function SidebarLayout({
                 Menu
               </button>
               <p className="text-sm text-slate-500">Welcome back</p>
-              <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
+              <h2 className="text-2xl font-semibold text-slate-900 2xl:text-3xl">{title}</h2>
             </div>
-            <div className="flex items-center gap-3">
-              <label className="relative">
+            <div className="flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-3 sm:w-auto sm:justify-end lg:flex-nowrap lg:min-w-[min(100%,20rem)] xl:min-w-0 xl:max-w-[28rem] 2xl:max-w-xl">
+              <label className="relative min-w-0 flex-1 sm:min-w-[12rem] sm:flex-initial lg:flex-1 lg:max-w-md 2xl:max-w-lg">
                 <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search records..."
-                  className="w-56 rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-slate-400"
+                  className="w-full min-w-0 rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-slate-400"
                 />
               </label>
-              <button className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Quick Add</button>
+              <button className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Quick Add</button>
             </div>
           </header>
           {children}
@@ -394,8 +394,8 @@ export function RegisterPage() {
 export function AdminDashboardPage() {
   return (
     <SidebarLayout title="Admin Dashboard" role="Admin Portal" items={adminSidebar}>
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 p-6 text-white shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-5">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 p-6 text-white shadow-sm 2xl:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-5 2xl:gap-8">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/90">Daily Operations</p>
             <h3 className="mt-2 text-2xl font-semibold">Your team is performing above target</h3>
@@ -411,14 +411,14 @@ export function AdminDashboardPage() {
           </div>
         </div>
       </section>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:gap-6">
         <StatCard label="Total Customers" value="1,284" icon={FiUsers} trend="+9.2% this month" />
         <StatCard label="Active Bookings" value="86" icon={FiCalendar} trend="+14.3% this week" />
         <StatCard label="Quote Requests" value="43" icon={FiMessageSquare} trend="+4.1% today" />
         <StatCard label="Completion Rate" value="97%" icon={FiPercent} trend="Top 5% in region" />
       </section>
-      <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr] 2xl:gap-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-900">Weekly Performance Snapshot</h3>
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">+12% growth</span>
@@ -457,7 +457,7 @@ export function AdminDashboardPage() {
             </span>
           </div>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Priority Queue</h3>
           <p className="mt-1 text-sm text-slate-500">Action these items to keep service levels high.</p>
           <div className="mt-4 space-y-3">
@@ -480,8 +480,8 @@ export function AdminDashboardPage() {
           </button>
         </article>
       </section>
-      <section className="grid gap-4 lg:grid-cols-3">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid gap-4 lg:grid-cols-3 2xl:gap-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Customer Management</h3>
           <p className="mt-1 text-sm text-slate-500">View, edit, and remove customers from your CRM.</p>
           <Link to="/admin/customers" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -489,7 +489,7 @@ export function AdminDashboardPage() {
             <FiArrowUpRight size={14} />
           </Link>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Booking Management</h3>
           <p className="mt-1 text-sm text-slate-500">Track booking pipeline and update service statuses.</p>
           <Link to="/admin/bookings" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -497,7 +497,7 @@ export function AdminDashboardPage() {
             <FiArrowUpRight size={14} />
           </Link>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Quote Management</h3>
           <p className="mt-1 text-sm text-slate-500">Review quote requests, update statuses, and clean up old entries.</p>
           <Link to="/admin/quotes" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -506,8 +506,8 @@ export function AdminDashboardPage() {
           </Link>
         </article>
       </section>
-      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid gap-4 lg:grid-cols-[1fr_1fr] 2xl:gap-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
           <div className="mt-4 space-y-4">
             {[
@@ -526,7 +526,7 @@ export function AdminDashboardPage() {
             ))}
           </div>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
           <h3 className="text-lg font-semibold text-slate-900">Today at a Glance</h3>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-slate-50 p-3">
