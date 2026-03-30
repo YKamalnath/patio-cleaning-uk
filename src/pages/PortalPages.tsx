@@ -138,10 +138,10 @@ function DataTable({
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-        <button className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+        {/* <button className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
           <FiPlus size={16} />
-          Add New
-        </button>
+          Add Newr
+        </button> */}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
