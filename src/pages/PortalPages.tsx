@@ -26,8 +26,9 @@ import {
   FiUser,
   FiUsers,
   FiX,
+  FiPlus,
 } from 'react-icons/fi'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate,useLocation  } from 'react-router-dom'
 
 type SidebarItem = {
   label: string
@@ -142,6 +143,7 @@ function DataTable({
   /** When set, action buttons invoke this with the action label and row index. */
   onRowAction?: (actionLabel: string, rowIndex: number) => void
 }) {
+  const location = useLocation()
   const colSpan = columns.length + (actions ? 1 : 0)
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -151,6 +153,13 @@ function DataTable({
           <FiPlus size={16} />
           Add Newr
         </button> */}
+        {(location.pathname.includes('/customer/bookings') || 
+          location.pathname.includes('/customer/quotes')) && (
+          <button className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+            <FiPlus size={16} />
+            Add New
+          </button>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
