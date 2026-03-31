@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, apiGet, apiPost } from '../lib/api'
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '../lib/api'
 import { clearSession, getStoredUser, getToken, setSession, type AuthUser } from '../lib/authStorage'
 import type { IconType } from 'react-icons'
 import {
@@ -129,6 +129,7 @@ function DataTable({
   actions,
   rowKeys,
   emptyMessage,
+  onRowAction,
 }: {
   title: string
   columns: string[]
@@ -137,6 +138,8 @@ function DataTable({
   /** Stable row keys (e.g. database ids). Falls back to row content + index. */
   rowKeys?: string[]
   emptyMessage?: string
+  /** When set, action buttons invoke this with the action label and row index. */
+  onRowAction?: (actionLabel: string, rowIndex: number) => void
 }) {
   const colSpan = columns.length + (actions ? 1 : 0)
   return (
@@ -184,7 +187,12 @@ function DataTable({
                         {actions.map((action) => {
                           const toneClass = action.tone === 'danger' ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
                           return (
-                            <button key={action.label} className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${toneClass}`}>
+                            <button
+                              key={action.label}
+                              type="button"
+                              onClick={() => onRowAction?.(action.label, rowIndex)}
+                              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${toneClass}`}
+                            >
                               <action.icon size={12} />
                               {action.label}
                             </button>
@@ -705,6 +713,14 @@ type CustomerListItem = {
   createdAt: string
 }
 
+type CustomerDetail = {
+  _id: string
+  name: string
+  email: string
+  role: string
+  createdAt: string
+}
+
 function formatRegisteredDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString('en-GB', {
@@ -726,6 +742,21 @@ export function AdminCustomersPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [viewCustomerId, setViewCustomerId] = useState<string | null>(null)
+  const [viewCustomer, setViewCustomer] = useState<CustomerDetail | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
+
+  const [editCustomer, setEditCustomer] = useState<CustomerListItem | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const [deleteCustomer, setDeleteCustomer] = useState<CustomerListItem | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const loadCustomers = useCallback(async () => {
     const token = getToken()
@@ -763,12 +794,130 @@ export function AdminCustomersPage() {
     void loadCustomers()
   }, [loadCustomers])
 
+  useEffect(() => {
+    if (!viewCustomerId) {
+      setViewCustomer(null)
+      setViewError(null)
+      setViewLoading(false)
+      return
+    }
+    const token = getToken()
+    if (!token) return
+    let cancelled = false
+    setViewLoading(true)
+    setViewError(null)
+    setViewCustomer(null)
+    void (async () => {
+      try {
+        const res = await apiGet<{ customer: CustomerDetail }>(`/api/admin/customers/${viewCustomerId}`, token)
+        if (!cancelled) {
+          setViewCustomer(res.data.customer)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof ApiError ? err.message : 'Could not load customer.'
+          setViewError(msg)
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            navigate('/portal/login', { replace: true })
+          }
+        }
+      } finally {
+        if (!cancelled) setViewLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [viewCustomerId, navigate])
+
   const token = getToken()
   const user = getStoredUser()
   const unauthorized = !token || user?.role !== 'admin'
 
   const rows: string[][] = customers.map((c) => [c.name, c.email, formatRegisteredDate(c.createdAt)])
   const rowKeys = customers.map((c) => c._id)
+
+  const handleRowAction = useCallback(
+    (actionLabel: string, rowIndex: number) => {
+      const row = customers[rowIndex]
+      if (!row) return
+      if (actionLabel === 'View') {
+        setViewCustomerId(row._id)
+        return
+      }
+      if (actionLabel === 'Edit') {
+        setEditCustomer(row)
+        setEditName(row.name)
+        setEditEmail(row.email)
+        setEditError(null)
+        return
+      }
+      if (actionLabel === 'Delete') {
+        setDeleteCustomer(row)
+        setDeleteError(null)
+      }
+    },
+    [customers],
+  )
+
+  const closeViewModal = () => {
+    setViewCustomerId(null)
+    setViewCustomer(null)
+    setViewError(null)
+  }
+
+  const submitEdit = async () => {
+    if (!editCustomer) return
+    const t = getToken()
+    if (!t) return
+    const name = editName.trim()
+    const email = editEmail.trim()
+    if (!name || !email) {
+      setEditError('Name and email are required.')
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await apiPatch<{ customer: CustomerListItem }>(
+        `/api/admin/customers/${editCustomer._id}`,
+        { name, email },
+        t,
+      )
+      setEditCustomer(null)
+      await loadCustomers()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not update customer.'
+      setEditError(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteCustomer) return
+    const t = getToken()
+    if (!t) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await apiDelete<{ id: string }>(`/api/admin/customers/${deleteCustomer._id}`, t)
+      setDeleteCustomer(null)
+      if (viewCustomerId === deleteCustomer._id) closeViewModal()
+      await loadCustomers()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not delete customer.'
+      setDeleteError(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   return (
     <SidebarLayout title="Customer Management" role="Admin Portal" items={adminSidebar}>
@@ -806,6 +955,7 @@ export function AdminCustomersPage() {
             rowKeys={rowKeys}
             emptyMessage="No customers in the database yet. New accounts will appear here after registration."
             actions={tableActions}
+            onRowAction={handleRowAction}
           />
           {total > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
@@ -836,6 +986,178 @@ export function AdminCustomersPage() {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {viewCustomerId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="customer-view-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="customer-view-title" className="text-lg font-semibold text-slate-900">
+                Customer details
+              </h3>
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            {viewLoading ? (
+              <p className="mt-6 text-sm text-slate-500">Loading…</p>
+            ) : viewError ? (
+              <p className="mt-4 text-sm text-rose-700" role="alert">
+                {viewError}
+              </p>
+            ) : viewCustomer ? (
+              <dl className="mt-6 space-y-4 text-sm">
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</dt>
+                  <dd className="mt-1 text-slate-900">{viewCustomer.name}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</dt>
+                  <dd className="mt-1 break-all text-slate-900">{viewCustomer.email}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Role</dt>
+                  <dd className="mt-1 capitalize text-slate-900">{viewCustomer.role}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Registered</dt>
+                  <dd className="mt-1 text-slate-900">{formatRegisteredDate(viewCustomer.createdAt)}</dd>
+                </div>
+              </dl>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editCustomer ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="customer-edit-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="customer-edit-title" className="text-lg font-semibold text-slate-900">
+                Edit customer
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditCustomer(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Update name or email. Password changes are not handled here.</p>
+            <div className="mt-5 grid gap-4">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Name</span>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  autoComplete="name"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Email</span>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  autoComplete="email"
+                />
+              </label>
+            </div>
+            {editError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {editError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditCustomer(null)}
+                disabled={editSaving}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitEdit()}
+                disabled={editSaving}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteCustomer ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="customer-delete-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="customer-delete-title" className="text-lg font-semibold text-slate-900">
+              Delete customer
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Permanently remove <span className="font-semibold text-slate-900">{deleteCustomer.name}</span> ({deleteCustomer.email})?
+              This cannot be undone.
+            </p>
+            {deleteError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteCustomer(null)}
+                disabled={deleteBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleteBusy}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </SidebarLayout>
   )

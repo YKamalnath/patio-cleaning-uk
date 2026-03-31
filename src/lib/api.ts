@@ -58,3 +58,30 @@ export async function apiGet<T>(path: string, token: string): Promise<ApiSuccess
   }
   return data as ApiSuccess<T>
 }
+
+export async function apiPatch<T>(path: string, body: Record<string, unknown>, token: string): Promise<ApiSuccess<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  const data = await parseJson(res)
+  if (!res.ok || data.success === false) {
+    const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    throw new ApiError(msg, res.status, data.errors)
+  }
+  return data as ApiSuccess<T>
+}
+
+export async function apiDelete<T>(path: string, token: string): Promise<ApiSuccess<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const data = await parseJson(res)
+  if (!res.ok || data.success === false) {
+    const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    throw new ApiError(msg, res.status, data.errors)
+  }
+  return data as ApiSuccess<T>
+}
