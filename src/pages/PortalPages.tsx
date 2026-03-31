@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '../lib/api'
 import { clearSession, getStoredUser, getToken, setSession, type AuthUser } from '../lib/authStorage'
 import type { IconType } from 'react-icons'
@@ -873,7 +874,9 @@ export function AdminCustomersPage() {
     const name = editName.trim()
     const email = editEmail.trim()
     if (!name || !email) {
-      setEditError('Name and email are required.')
+      const msg = 'Name and email are required.'
+      setEditError(msg)
+      toast.error(msg)
       return
     }
     setEditSaving(true)
@@ -885,10 +888,12 @@ export function AdminCustomersPage() {
         t,
       )
       setEditCustomer(null)
+      toast.success('Customer updated successfully.')
       await loadCustomers()
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Could not update customer.'
       setEditError(msg)
+      toast.error(msg)
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         navigate('/portal/login', { replace: true })
       }
@@ -905,12 +910,15 @@ export function AdminCustomersPage() {
     setDeleteError(null)
     try {
       await apiDelete<{ id: string }>(`/api/admin/customers/${deleteCustomer._id}`, t)
+      const deletedName = deleteCustomer.name
       setDeleteCustomer(null)
       if (viewCustomerId === deleteCustomer._id) closeViewModal()
+      toast.success(`Customer “${deletedName}” was deleted.`)
       await loadCustomers()
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Could not delete customer.'
       setDeleteError(msg)
+      toast.error(msg)
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         navigate('/portal/login', { replace: true })
       }
