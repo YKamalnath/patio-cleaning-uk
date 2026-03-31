@@ -3,7 +3,12 @@
  */
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
 
-export type ApiSuccess<T> = { success: true; message: string; data: T; meta?: unknown }
+export type ApiSuccess<T> = {
+  success: true
+  message: string
+  data: T
+  meta?: { page?: number; limit?: number; total?: number; pages?: number }
+}
 
 export class ApiError extends Error {
   constructor(

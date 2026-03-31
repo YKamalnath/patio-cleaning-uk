@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { ApiError, apiPost } from '../lib/api'
-import { clearSession, setSession, type AuthUser } from '../lib/authStorage'
+import { useCallback, useEffect, useState } from 'react'
+import { ApiError, apiGet, apiPost } from '../lib/api'
+import { clearSession, getStoredUser, getToken, setSession, type AuthUser } from '../lib/authStorage'
 import type { IconType } from 'react-icons'
 import {
   FiArrowUpRight,
@@ -18,7 +18,6 @@ import {
   FiMenu,
   FiMonitor,
   FiPercent,
-  FiPlus,
   FiSave,
   FiSearch,
   FiSettings,
@@ -128,12 +127,18 @@ function DataTable({
   columns,
   rows,
   actions,
+  rowKeys,
+  emptyMessage,
 }: {
   title: string
   columns: string[]
   rows: string[][]
   actions?: TableAction[]
+  /** Stable row keys (e.g. database ids). Falls back to row content + index. */
+  rowKeys?: string[]
+  emptyMessage?: string
 }) {
+  const colSpan = columns.length + (actions ? 1 : 0)
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -156,30 +161,41 @@ function DataTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.join('-')} className="rounded-xl bg-slate-50 text-slate-700">
-                {row.map((value) => (
-                  <td key={value} className="px-3 py-3">
-                    {value}
-                  </td>
-                ))}
-                {actions ? (
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {actions.map((action) => {
-                        const toneClass = action.tone === 'danger' ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                        return (
-                          <button key={action.label} className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${toneClass}`}>
-                            <action.icon size={12} />
-                            {action.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </td>
-                ) : null}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={colSpan} className="rounded-xl bg-slate-50 px-3 py-10 text-center text-slate-500">
+                  {emptyMessage ?? 'No records.'}
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((row, rowIndex) => (
+                <tr
+                  key={rowKeys?.[rowIndex] ?? `${row.join('|')}-${rowIndex}`}
+                  className="rounded-xl bg-slate-50 text-slate-700"
+                >
+                  {row.map((value, cellIndex) => (
+                    <td key={`${rowKeys?.[rowIndex] ?? rowIndex}-${cellIndex}`} className="px-3 py-3">
+                      {value}
+                    </td>
+                  ))}
+                  {actions ? (
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        {actions.map((action) => {
+                          const toneClass = action.tone === 'danger' ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+                          return (
+                            <button key={action.label} className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${toneClass}`}>
+                              <action.icon size={12} />
+                              {action.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -682,19 +698,145 @@ export function AdminDashboardPage() {
   )
 }
 
+type CustomerListItem = {
+  _id: string
+  name: string
+  email: string
+  createdAt: string
+}
+
+function formatRegisteredDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return '—'
+  }
+}
+
 export function AdminCustomersPage() {
+  const navigate = useNavigate()
+  const [page, setPage] = useState(1)
+  const limit = 20
+  const [customers, setCustomers] = useState<CustomerListItem[]>([])
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadCustomers = useCallback(async () => {
+    const token = getToken()
+    const user = getStoredUser()
+    if (!token || user?.role !== 'admin') {
+      setError(null)
+      setLoading(false)
+      setCustomers([])
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiGet<{ customers: CustomerListItem[] }>(
+        `/api/admin/customers?page=${page}&limit=${limit}`,
+        token,
+      )
+      setCustomers(res.data.customers ?? [])
+      const meta = res.meta
+      if (meta?.pages != null) setTotalPages(Math.max(1, meta.pages))
+      if (meta?.total != null) setTotal(meta.total)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load customers.'
+      setError(msg)
+      setCustomers([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [page, navigate])
+
+  useEffect(() => {
+    void loadCustomers()
+  }, [loadCustomers])
+
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'admin'
+
+  const rows: string[][] = customers.map((c) => [c.name, c.email, formatRegisteredDate(c.createdAt)])
+  const rowKeys = customers.map((c) => c._id)
+
   return (
     <SidebarLayout title="Customer Management" role="Admin Portal" items={adminSidebar}>
-      <DataTable
-        title="Customer Management"
-        columns={['Name', 'Email', 'Phone', 'Segment']}
-        rows={[
-          ['Emma Thompson', 'emma@email.com', '+44 7401 892173', 'Residential'],
-          ['Daniel White', 'daniel@email.com', '+44 7432 981244', 'Commercial'],
-          ['Sophia Green', 'sophia@email.com', '+44 7511 220461', 'Residential'],
-        ]}
-        actions={tableActions}
-      />
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Admin sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Sign in with an admin account to view registered customers.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : null}
+
+      {!unauthorized && error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!unauthorized && loading ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+          Loading customers…
+        </section>
+      ) : null}
+
+      {!unauthorized && !loading ? (
+        <>
+          <DataTable
+            title="Registered customers"
+            columns={['Name', 'Email', 'Registered']}
+            rows={rows}
+            rowKeys={rowKeys}
+            emptyMessage="No customers in the database yet. New accounts will appear here after registration."
+            actions={tableActions}
+          />
+          {total > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+              <span>
+                Showing {customers.length} of {total} customer{total === 1 ? '' : 's'}
+                {totalPages > 1 ? ` · Page ${page} of ${totalPages}` : null}
+              </span>
+              {totalPages > 1 ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </SidebarLayout>
   )
 }
