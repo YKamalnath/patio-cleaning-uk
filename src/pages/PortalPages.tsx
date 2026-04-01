@@ -8,7 +8,6 @@ import {
   FiBarChart2,
   FiCalendar,
   FiCheckCircle,
-  FiClock,
   FiEdit3,
   FiEye,
   FiGrid,
@@ -799,6 +798,59 @@ type CustomerQuoteRecord = {
   createdAt: string
 }
 
+type PopulatedCustomerRef = { _id?: string; name?: string; email?: string }
+
+type AdminBookingRecord = {
+  _id: string
+  customer?: PopulatedCustomerRef | string
+  serviceType: string
+  area?: string
+  preferredDate: string
+  timeSlot?: string
+  notes?: string
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  createdAt?: string
+}
+
+type AdminQuoteRecord = {
+  _id: string
+  customer?: PopulatedCustomerRef | string
+  contactName: string
+  email: string
+  phone?: string
+  postcode?: string
+  serviceSummary: string
+  message?: string
+  status: 'pending' | 'quoted' | 'declined' | 'accepted'
+  quotedAmount?: number
+  adminNotes?: string
+  createdAt?: string
+}
+
+function customerDisplayLabel(customer: PopulatedCustomerRef | string | undefined): string {
+  if (!customer) return '—'
+  if (typeof customer === 'string') return 'Linked customer'
+  const name = customer.name?.trim()
+  const email = customer.email?.trim()
+  if (name && email) return `${name} · ${email}`
+  return name || email || '—'
+}
+
+function dateInputFromIso(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function isoFromDateInput(value: string): string {
+  const [y, m, d] = value.split('-').map(Number)
+  if (!y || !m || !d) return new Date(value).toISOString()
+  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString()
+}
+
 export function AdminCustomersPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
@@ -1237,42 +1289,1024 @@ export function AdminCustomersPage() {
 }
 
 export function AdminBookingsPage() {
+  const navigate = useNavigate()
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [bookings, setBookings] = useState<AdminBookingRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [viewBookingId, setViewBookingId] = useState<string | null>(null)
+  const [viewBooking, setViewBooking] = useState<AdminBookingRecord | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
+
+  const [editBooking, setEditBooking] = useState<AdminBookingRecord | null>(null)
+  const [editStatus, setEditStatus] = useState<AdminBookingRecord['status']>('pending')
+  const [editServiceType, setEditServiceType] = useState('')
+  const [editPreferredDate, setEditPreferredDate] = useState('')
+  const [editTimeSlot, setEditTimeSlot] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const [deleteBooking, setDeleteBooking] = useState<AdminBookingRecord | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const loadBookings = useCallback(async () => {
+    const token = getToken()
+    const user = getStoredUser()
+    if (!token || user?.role !== 'admin') {
+      setError(null)
+      setLoading(false)
+      setBookings([])
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const q = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ''
+      const res = await apiGet<{ bookings: AdminBookingRecord[] }>(`/api/admin/bookings${q}`, token)
+      setBookings(res.data.bookings ?? [])
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load bookings.'
+      setError(msg)
+      setBookings([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, navigate])
+
+  useEffect(() => {
+    void loadBookings()
+  }, [loadBookings])
+
+  useEffect(() => {
+    if (!viewBookingId) {
+      setViewBooking(null)
+      setViewError(null)
+      setViewLoading(false)
+      return
+    }
+    const token = getToken()
+    if (!token) return
+    let cancelled = false
+    setViewLoading(true)
+    setViewError(null)
+    setViewBooking(null)
+    void (async () => {
+      try {
+        const res = await apiGet<{ booking: AdminBookingRecord }>(`/api/admin/bookings/${viewBookingId}`, token)
+        if (!cancelled) setViewBooking(res.data.booking)
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof ApiError ? err.message : 'Could not load booking.'
+          setViewError(msg)
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            navigate('/portal/login', { replace: true })
+          }
+        }
+      } finally {
+        if (!cancelled) setViewLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [viewBookingId, navigate])
+
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'admin'
+
+  const bookingRows: string[][] = bookings.map((b) => [
+    formatShortRef(b._id, 'BK'),
+    customerDisplayLabel(
+      typeof b.customer === 'object' && b.customer != null ? b.customer : undefined,
+    ),
+    b.serviceType,
+    formatDisplayDate(b.preferredDate),
+    formatStatusLabel(b.status),
+  ])
+  const bookingRowKeys = bookings.map((b) => b._id)
+
+  const openEdit = (b: AdminBookingRecord) => {
+    setEditBooking(b)
+    setEditStatus(b.status)
+    setEditServiceType(b.serviceType)
+    setEditPreferredDate(dateInputFromIso(b.preferredDate))
+    setEditTimeSlot(b.timeSlot ?? '')
+    setEditNotes(b.notes ?? '')
+    setEditError(null)
+  }
+
+  const submitBookingEdit = async () => {
+    if (!editBooking) return
+    const t = getToken()
+    if (!t) return
+    const serviceType = editServiceType.trim()
+    if (!serviceType || !editPreferredDate) {
+      const msg = 'Service type and preferred date are required.'
+      setEditError(msg)
+      toast.error(msg)
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await apiPatch<{ booking: AdminBookingRecord }>(
+        `/api/admin/bookings/${editBooking._id}`,
+        {
+          status: editStatus,
+          serviceType,
+          preferredDate: isoFromDateInput(editPreferredDate),
+          notes: editNotes.trim() || undefined,
+          timeSlot: editTimeSlot.trim() || undefined,
+        },
+        t,
+      )
+      setEditBooking(null)
+      toast.success('Booking updated.')
+      await loadBookings()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not update booking.'
+      setEditError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const confirmBookingDelete = async () => {
+    if (!deleteBooking) return
+    const t = getToken()
+    if (!t) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await apiDelete<{ id: string }>(`/api/admin/bookings/${deleteBooking._id}`, t)
+      const ref = formatShortRef(deleteBooking._id, 'BK')
+      setDeleteBooking(null)
+      if (viewBookingId === deleteBooking._id) {
+        setViewBookingId(null)
+        setViewBooking(null)
+      }
+      toast.success(`Booking ${ref} was deleted.`)
+      await loadBookings()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not delete booking.'
+      setDeleteError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const handleBookingRowAction = useCallback(
+    (actionLabel: string, rowIndex: number) => {
+      const row = bookings[rowIndex]
+      if (!row) return
+      if (actionLabel === 'View') {
+        setViewBookingId(row._id)
+        return
+      }
+      if (actionLabel === 'Edit') {
+        openEdit(row)
+        return
+      }
+      if (actionLabel === 'Delete') {
+        setDeleteBooking(row)
+        setDeleteError(null)
+      }
+    },
+    [bookings],
+  )
+
   return (
     <SidebarLayout title="Booking Management" role="Admin Portal" items={adminSidebar}>
-      <DataTable
-        title="Booking Management"
-        columns={['Booking ID', 'Customer', 'Service', 'Status']}
-        rows={[
-          ['#BK-1094', 'Emma Thompson', 'Patio Deep Clean', 'Pending'],
-          ['#BK-1093', 'Daniel White', 'Driveway Jet Wash', 'Confirmed'],
-          ['#BK-1092', 'Sophia Green', 'Deck Revive Package', 'Completed'],
-        ]}
-        actions={[
-          { label: 'Pending', icon: FiClock, tone: 'neutral' },
-          { label: 'Confirmed', icon: FiCheckCircle, tone: 'neutral' },
-          { label: 'Delete', icon: FiTrash2, tone: 'danger' },
-        ]}
-      />
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Admin sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Sign in with an admin account to manage bookings.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : null}
+
+      {!unauthorized && error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!unauthorized && loading ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+          Loading bookings…
+        </section>
+      ) : null}
+
+      {!unauthorized && !loading ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-sm text-slate-600">
+              {bookings.length} booking{bookings.length === 1 ? '' : 's'}
+              {statusFilter ? ` · filtered by ${formatStatusLabel(statusFilter)}` : ''}
+            </p>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <span className="whitespace-nowrap">Status</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-400"
+              >
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+          </div>
+          <DataTable
+            title="All bookings"
+            columns={['Reference', 'Customer', 'Service', 'Preferred date', 'Status']}
+            rows={bookingRows}
+            rowKeys={bookingRowKeys}
+            emptyMessage="No bookings yet. Customer bookings will appear here once submitted."
+            actions={tableActions}
+            onRowAction={handleBookingRowAction}
+          />
+        </>
+      ) : null}
+
+      {viewBookingId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-view-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="booking-view-title" className="text-lg font-semibold text-slate-900">
+                Booking details
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewBookingId(null)
+                  setViewBooking(null)
+                  setViewError(null)
+                }}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            {viewLoading ? (
+              <p className="mt-6 text-sm text-slate-500">Loading…</p>
+            ) : viewError ? (
+              <p className="mt-4 text-sm text-rose-700" role="alert">
+                {viewError}
+              </p>
+            ) : viewBooking ? (
+              <dl className="mt-6 space-y-4 text-sm">
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reference</dt>
+                  <dd className="mt-1 font-mono text-slate-900">{formatShortRef(viewBooking._id, 'BK')}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {customerDisplayLabel(
+                      typeof viewBooking.customer === 'object' && viewBooking.customer != null
+                        ? viewBooking.customer
+                        : undefined,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Service</dt>
+                  <dd className="mt-1 text-slate-900">{viewBooking.serviceType}</dd>
+                </div>
+                {viewBooking.area ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Area</dt>
+                    <dd className="mt-1 text-slate-900">{viewBooking.area}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred date</dt>
+                  <dd className="mt-1 text-slate-900">{formatDisplayDate(viewBooking.preferredDate)}</dd>
+                </div>
+                {viewBooking.timeSlot ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Time slot</dt>
+                    <dd className="mt-1 text-slate-900">{viewBooking.timeSlot}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</dt>
+                  <dd className="mt-1 text-slate-900">{formatStatusLabel(viewBooking.status)}</dd>
+                </div>
+                {viewBooking.notes ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-slate-700">{viewBooking.notes}</dd>
+                  </div>
+                ) : null}
+                {viewBooking.createdAt ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</dt>
+                    <dd className="mt-1 text-slate-900">{formatRegisteredDate(viewBooking.createdAt)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewBookingId(null)
+                  setViewBooking(null)
+                  setViewError(null)
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editBooking ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-edit-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="booking-edit-title" className="text-lg font-semibold text-slate-900">
+                Edit booking
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditBooking(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <p className="mt-1 font-mono text-xs text-slate-500">{formatShortRef(editBooking._id, 'BK')}</p>
+            <div className="mt-5 grid gap-4">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Status</span>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as AdminBookingRecord['status'])}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Service type</span>
+                <input
+                  list="admin-booking-service-suggestions"
+                  value={editServiceType}
+                  onChange={(e) => setEditServiceType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+                <datalist id="admin-booking-service-suggestions">
+                  {serviceOptions.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Preferred date</span>
+                <input
+                  type="date"
+                  value={editPreferredDate}
+                  onChange={(e) => setEditPreferredDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Time slot (optional)</span>
+                <input
+                  value={editTimeSlot}
+                  onChange={(e) => setEditTimeSlot(e.target.value)}
+                  placeholder="e.g. Morning"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Notes (optional)</span>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+            </div>
+            {editError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {editError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditBooking(null)}
+                disabled={editSaving}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitBookingEdit()}
+                disabled={editSaving}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteBooking ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-delete-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="booking-delete-title" className="text-lg font-semibold text-slate-900">
+              Delete booking
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Permanently remove booking <span className="font-mono font-semibold">{formatShortRef(deleteBooking._id, 'BK')}</span> for{' '}
+              <span className="font-semibold">{deleteBooking.serviceType}</span>? This cannot be undone.
+            </p>
+            {deleteError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteBooking(null)}
+                disabled={deleteBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmBookingDelete()}
+                disabled={deleteBusy}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SidebarLayout>
   )
 }
 
 export function AdminQuotesPage() {
+  const navigate = useNavigate()
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [quotes, setQuotes] = useState<AdminQuoteRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [viewQuoteId, setViewQuoteId] = useState<string | null>(null)
+  const [viewQuote, setViewQuote] = useState<AdminQuoteRecord | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
+
+  const [editQuote, setEditQuote] = useState<AdminQuoteRecord | null>(null)
+  const [editStatus, setEditStatus] = useState<AdminQuoteRecord['status']>('pending')
+  const [editQuotedAmount, setEditQuotedAmount] = useState('')
+  const [editAdminNotes, setEditAdminNotes] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const [deleteQuote, setDeleteQuote] = useState<AdminQuoteRecord | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const loadQuotes = useCallback(async () => {
+    const token = getToken()
+    const user = getStoredUser()
+    if (!token || user?.role !== 'admin') {
+      setError(null)
+      setLoading(false)
+      setQuotes([])
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const q = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ''
+      const res = await apiGet<{ quotes: AdminQuoteRecord[] }>(`/api/admin/quotes${q}`, token)
+      setQuotes(res.data.quotes ?? [])
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load quotes.'
+      setError(msg)
+      setQuotes([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, navigate])
+
+  useEffect(() => {
+    void loadQuotes()
+  }, [loadQuotes])
+
+  useEffect(() => {
+    if (!viewQuoteId) {
+      setViewQuote(null)
+      setViewError(null)
+      setViewLoading(false)
+      return
+    }
+    const token = getToken()
+    if (!token) return
+    let cancelled = false
+    setViewLoading(true)
+    setViewError(null)
+    setViewQuote(null)
+    void (async () => {
+      try {
+        const res = await apiGet<{ quote: AdminQuoteRecord }>(`/api/admin/quotes/${viewQuoteId}`, token)
+        if (!cancelled) setViewQuote(res.data.quote)
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof ApiError ? err.message : 'Could not load quote.'
+          setViewError(msg)
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            navigate('/portal/login', { replace: true })
+          }
+        }
+      } finally {
+        if (!cancelled) setViewLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [viewQuoteId, navigate])
+
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'admin'
+
+  const quoteRows: string[][] = quotes.map((q) => [
+    formatShortRef(q._id, 'QT'),
+    q.contactName,
+    q.serviceSummary.length > 48 ? `${q.serviceSummary.slice(0, 48)}…` : q.serviceSummary,
+    formatGbp(q.quotedAmount),
+    formatStatusLabel(q.status),
+  ])
+  const quoteRowKeys = quotes.map((q) => q._id)
+
+  const openQuoteEdit = (q: AdminQuoteRecord) => {
+    setEditQuote(q)
+    setEditStatus(q.status)
+    setEditQuotedAmount(q.quotedAmount != null ? String(q.quotedAmount) : '')
+    setEditAdminNotes(q.adminNotes ?? '')
+    setEditError(null)
+  }
+
+  const submitQuoteEdit = async () => {
+    if (!editQuote) return
+    const t = getToken()
+    if (!t) return
+    const amountStr = editQuotedAmount.trim()
+    let quotedAmount: number | undefined
+    if (amountStr !== '') {
+      const n = Number(amountStr)
+      if (Number.isNaN(n) || n < 0) {
+        const msg = 'Quoted amount must be a valid non-negative number.'
+        setEditError(msg)
+        toast.error(msg)
+        return
+      }
+      quotedAmount = n
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const body: Record<string, unknown> = {
+        status: editStatus,
+        adminNotes: editAdminNotes.trim() || undefined,
+      }
+      if (quotedAmount !== undefined) body.quotedAmount = quotedAmount
+      await apiPatch<{ quote: AdminQuoteRecord }>(`/api/admin/quotes/${editQuote._id}`, body, t)
+      setEditQuote(null)
+      toast.success('Quote updated.')
+      await loadQuotes()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not update quote.'
+      setEditError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const confirmQuoteDelete = async () => {
+    if (!deleteQuote) return
+    const t = getToken()
+    if (!t) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await apiDelete<{ id: string }>(`/api/admin/quotes/${deleteQuote._id}`, t)
+      const ref = formatShortRef(deleteQuote._id, 'QT')
+      setDeleteQuote(null)
+      if (viewQuoteId === deleteQuote._id) {
+        setViewQuoteId(null)
+        setViewQuote(null)
+      }
+      toast.success(`Quote ${ref} was deleted.`)
+      await loadQuotes()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not delete quote.'
+      setDeleteError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const handleQuoteRowAction = useCallback(
+    (actionLabel: string, rowIndex: number) => {
+      const row = quotes[rowIndex]
+      if (!row) return
+      if (actionLabel === 'View') {
+        setViewQuoteId(row._id)
+        return
+      }
+      if (actionLabel === 'Edit') {
+        openQuoteEdit(row)
+        return
+      }
+      if (actionLabel === 'Delete') {
+        setDeleteQuote(row)
+        setDeleteError(null)
+      }
+    },
+    [quotes],
+  )
+
   return (
     <SidebarLayout title="Quote Management" role="Admin Portal" items={adminSidebar}>
-      <DataTable
-        title="Free Quote Management"
-        columns={['Quote ID', 'Customer', 'Service', 'Status']}
-        rows={[
-          ['#QT-510', 'Olivia Park', 'Stone Seal + Clean', 'Reviewing'],
-          ['#QT-509', 'Lucas Reed', 'Garden Slab Refresh', 'Approved'],
-          ['#QT-508', 'Ella Brown', 'Patio Restoration', 'Pending'],
-        ]}
-        actions={[
-          { label: 'Update', icon: FiEdit3, tone: 'neutral' },
-          { label: 'Delete', icon: FiTrash2, tone: 'danger' },
-        ]}
-      />
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Admin sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Sign in with an admin account to manage quote requests.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : null}
+
+      {!unauthorized && error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!unauthorized && loading ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+          Loading quotes…
+        </section>
+      ) : null}
+
+      {!unauthorized && !loading ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-sm text-slate-600">
+              {quotes.length} quote request{quotes.length === 1 ? '' : 's'}
+              {statusFilter ? ` · filtered by ${formatStatusLabel(statusFilter)}` : ''}
+            </p>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <span className="whitespace-nowrap">Status</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-400"
+              >
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="quoted">Quoted</option>
+                <option value="accepted">Accepted</option>
+                <option value="declined">Declined</option>
+              </select>
+            </label>
+          </div>
+          <DataTable
+            title="Quote requests"
+            columns={['Reference', 'Contact', 'Service summary', 'Quoted', 'Status']}
+            rows={quoteRows}
+            rowKeys={quoteRowKeys}
+            emptyMessage="No quote requests yet. Submissions from customers will appear here."
+            actions={tableActions}
+            onRowAction={handleQuoteRowAction}
+          />
+        </>
+      ) : null}
+
+      {viewQuoteId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quote-view-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="quote-view-title" className="text-lg font-semibold text-slate-900">
+                Quote request
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewQuoteId(null)
+                  setViewQuote(null)
+                  setViewError(null)
+                }}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            {viewLoading ? (
+              <p className="mt-6 text-sm text-slate-500">Loading…</p>
+            ) : viewError ? (
+              <p className="mt-4 text-sm text-rose-700" role="alert">
+                {viewError}
+              </p>
+            ) : viewQuote ? (
+              <dl className="mt-6 space-y-4 text-sm">
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reference</dt>
+                  <dd className="mt-1 font-mono text-slate-900">{formatShortRef(viewQuote._id, 'QT')}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Account</dt>
+                  <dd className="mt-1 text-slate-900">
+                    {customerDisplayLabel(
+                      typeof viewQuote.customer === 'object' && viewQuote.customer != null ? viewQuote.customer : undefined,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</dt>
+                  <dd className="mt-1 text-slate-900">{viewQuote.contactName}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</dt>
+                  <dd className="mt-1 break-all text-slate-900">{viewQuote.email}</dd>
+                </div>
+                {viewQuote.phone ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</dt>
+                    <dd className="mt-1 text-slate-900">{viewQuote.phone}</dd>
+                  </div>
+                ) : null}
+                {viewQuote.postcode ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Postcode</dt>
+                    <dd className="mt-1 text-slate-900">{viewQuote.postcode}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Service summary</dt>
+                  <dd className="mt-1 text-slate-900">{viewQuote.serviceSummary}</dd>
+                </div>
+                {viewQuote.message ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Message</dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-slate-700">{viewQuote.message}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</dt>
+                  <dd className="mt-1 text-slate-900">{formatStatusLabel(viewQuote.status)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quoted amount</dt>
+                  <dd className="mt-1 text-slate-900">{formatGbp(viewQuote.quotedAmount)}</dd>
+                </div>
+                {viewQuote.adminNotes ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Admin notes</dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-slate-700">{viewQuote.adminNotes}</dd>
+                  </div>
+                ) : null}
+                {viewQuote.createdAt ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted</dt>
+                    <dd className="mt-1 text-slate-900">{formatRegisteredDate(viewQuote.createdAt)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewQuoteId(null)
+                  setViewQuote(null)
+                  setViewError(null)
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editQuote ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quote-edit-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="quote-edit-title" className="text-lg font-semibold text-slate-900">
+                Update quote
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditQuote(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {editQuote.contactName} · {editQuote.serviceSummary.slice(0, 60)}
+              {editQuote.serviceSummary.length > 60 ? '…' : ''}
+            </p>
+            <div className="mt-5 grid gap-4">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Status</span>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as AdminQuoteRecord['status'])}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="quoted">Quoted</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="declined">Declined</option>
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Quoted amount (GBP)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.01"
+                  value={editQuotedAmount}
+                  onChange={(e) => setEditQuotedAmount(e.target.value)}
+                  placeholder="Leave blank to keep the current amount"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Admin notes</span>
+                <textarea
+                  value={editAdminNotes}
+                  onChange={(e) => setEditAdminNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Internal notes (not shown to customer in this app)"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+            </div>
+            {editError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {editError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditQuote(null)}
+                disabled={editSaving}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitQuoteEdit()}
+                disabled={editSaving}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteQuote ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quote-delete-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="quote-delete-title" className="text-lg font-semibold text-slate-900">
+              Delete quote request
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Permanently remove quote <span className="font-mono font-semibold">{formatShortRef(deleteQuote._id, 'QT')}</span> from{' '}
+              <span className="font-semibold">{deleteQuote.contactName}</span>? This cannot be undone.
+            </p>
+            {deleteError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteQuote(null)}
+                disabled={deleteBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmQuoteDelete()}
+                disabled={deleteBusy}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SidebarLayout>
   )
 }
