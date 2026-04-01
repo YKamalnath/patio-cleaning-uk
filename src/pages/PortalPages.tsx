@@ -52,6 +52,7 @@ const adminSidebar: SidebarItem[] = [
   { label: 'Gallery Management', icon: FiImage, href: '/admin/gallery' },
   { label: 'Settings', icon: FiSettings, href: '/admin/settings' },
   { label: 'View Website', icon: FiMonitor, href: '/' },
+  { label: 'Logout', icon: FiLogOut, href: '/portal/login', onNavigate: () => clearSession() },
 ]
 
 const customerSidebar: SidebarItem[] = [
