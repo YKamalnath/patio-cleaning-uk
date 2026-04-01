@@ -28,7 +28,8 @@ import {
   FiX,
   FiPlus,
 } from 'react-icons/fi'
-import { Link, NavLink, useNavigate,useLocation  } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { services as serviceOptions } from '../data/siteData'
 
 type SidebarItem = {
   label: string
@@ -132,6 +133,8 @@ function DataTable({
   rowKeys,
   emptyMessage,
   onRowAction,
+  onAddNew,
+  addNewLabel,
 }: {
   title: string
   columns: string[]
@@ -142,24 +145,24 @@ function DataTable({
   emptyMessage?: string
   /** When set, action buttons invoke this with the action label and row index. */
   onRowAction?: (actionLabel: string, rowIndex: number) => void
+  onAddNew?: () => void
+  addNewLabel?: string
 }) {
-  const location = useLocation()
   const colSpan = columns.length + (actions ? 1 : 0)
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-        {/* <button className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
-          <FiPlus size={16} />
-          Add Newr
-        </button> */}
-        {(location.pathname.includes('/customer/bookings') || 
-          location.pathname.includes('/customer/quotes')) && (
-          <button className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+        {onAddNew ? (
+          <button
+            type="button"
+            onClick={onAddNew}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
             <FiPlus size={16} />
-            Add New
+            {addNewLabel ?? 'Add New'}
           </button>
-        )}
+        ) : null}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
@@ -741,6 +744,59 @@ function formatRegisteredDate(iso: string) {
   } catch {
     return '—'
   }
+}
+
+function formatDisplayDate(iso: string | undefined) {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return '—'
+  }
+}
+
+function formatStatusLabel(status: string) {
+  if (!status) return '—'
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function formatShortRef(id: string, prefix: string) {
+  if (!id || id.length < 4) return `#${prefix}…`
+  return `#${prefix}-${id.slice(-6).toUpperCase()}`
+}
+
+function formatGbp(amount: number | undefined) {
+  if (amount == null || Number.isNaN(amount)) return '—'
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount)
+}
+
+type CustomerBookingRecord = {
+  _id: string
+  serviceType: string
+  area?: string
+  preferredDate: string
+  timeSlot?: string
+  notes?: string
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  createdAt?: string
+}
+
+type CustomerQuoteRecord = {
+  _id: string
+  contactName: string
+  email: string
+  phone?: string
+  postcode?: string
+  serviceSummary: string
+  message?: string
+  status: 'pending' | 'quoted' | 'declined' | 'accepted'
+  quotedAmount?: number
+  adminNotes?: string
+  createdAt: string
 }
 
 export function AdminCustomersPage() {
@@ -1393,33 +1449,517 @@ export function CustomerDashboardPage() {
 }
 
 export function CustomerBookingsPage() {
+  const navigate = useNavigate()
+  const [bookings, setBookings] = useState<CustomerBookingRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showNewModal, setShowNewModal] = useState(false)
+  const [newServiceType, setNewServiceType] = useState(serviceOptions[0] ?? '')
+  const [newPreferredDate, setNewPreferredDate] = useState('')
+  const [newArea, setNewArea] = useState('')
+  const [newTimeSlot, setNewTimeSlot] = useState('')
+  const [newNotes, setNewNotes] = useState('')
+  const [submitBusy, setSubmitBusy] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'customer'
+
+  const loadBookings = useCallback(async () => {
+    const t = getToken()
+    const u = getStoredUser()
+    if (!t || u?.role !== 'customer') {
+      setBookings([])
+      setLoading(false)
+      setError(null)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiGet<{ bookings: CustomerBookingRecord[] }>('/api/customer/bookings', t)
+      setBookings(res.data.bookings ?? [])
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load bookings.'
+      setError(msg)
+      setBookings([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    void loadBookings()
+  }, [loadBookings])
+
+  const openNewModal = () => {
+    setNewServiceType(serviceOptions[0] ?? '')
+    setNewPreferredDate('')
+    setNewArea('')
+    setNewTimeSlot('')
+    setNewNotes('')
+    setSubmitError(null)
+    setShowNewModal(true)
+  }
+
+  const submitNewBooking = async () => {
+    const t = getToken()
+    if (!t) return
+    const serviceType = newServiceType.trim()
+    if (!serviceType || !newPreferredDate) {
+      const msg = 'Service type and preferred date are required.'
+      setSubmitError(msg)
+      toast.error(msg)
+      return
+    }
+    const preferredDate = new Date(newPreferredDate).toISOString()
+    setSubmitBusy(true)
+    setSubmitError(null)
+    try {
+      await apiPost<{ booking: CustomerBookingRecord }>(
+        '/api/customer/bookings',
+        {
+          serviceType,
+          preferredDate,
+          area: newArea.trim() || undefined,
+          timeSlot: newTimeSlot.trim() || undefined,
+          notes: newNotes.trim() || undefined,
+        },
+        t,
+      )
+      setShowNewModal(false)
+      toast.success('Booking request submitted.')
+      await loadBookings()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not create booking.'
+      setSubmitError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setSubmitBusy(false)
+    }
+  }
+
+  const rows: string[][] = bookings.map((b) => [
+    formatShortRef(b._id, 'BK'),
+    formatDisplayDate(b.preferredDate),
+    b.serviceType,
+    b.area?.trim() ? b.area : '—',
+    b.timeSlot?.trim() ? b.timeSlot : '—',
+    formatStatusLabel(b.status),
+  ])
+  const rowKeys = bookings.map((b) => b._id)
+
   return (
     <SidebarLayout title="My Bookings" role="Customer Portal" items={customerSidebar}>
-      <DataTable
-        title="My Bookings"
-        columns={['Booking ID', 'Date', 'Service', 'Status']}
-        rows={[
-          ['#BK-1094', '2026-04-01', 'Patio Deep Clean', 'Pending'],
-          ['#BK-1071', '2026-03-16', 'Driveway Wash', 'Completed'],
-          ['#BK-1036', '2026-01-18', 'Decking Restoration', 'Completed'],
-        ]}
-      />
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Log in with your customer account to view and manage bookings.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : loading ? (
+        <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600 shadow-sm">Loading bookings…</p>
+      ) : error ? (
+        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900">
+          <p className="font-medium">{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadBookings()}
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Try again
+          </button>
+        </section>
+      ) : (
+        <DataTable
+          title="My Bookings"
+          columns={['Reference', 'Preferred date', 'Service', 'Area', 'Time', 'Status']}
+          rows={rows}
+          rowKeys={rowKeys}
+          emptyMessage="You have no bookings yet. Add a new booking request to get started."
+          onAddNew={openNewModal}
+          addNewLabel="New booking"
+        />
+      )}
+
+      {showNewModal ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-booking-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="new-booking-title" className="text-lg font-semibold text-slate-900">
+              New booking request
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">We will confirm your slot by email or phone.</p>
+            <div className="mt-4 grid gap-3">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Service type</span>
+                <select
+                  value={newServiceType}
+                  onChange={(e) => setNewServiceType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-400"
+                >
+                  {serviceOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Preferred date</span>
+                <input
+                  type="date"
+                  value={newPreferredDate}
+                  onChange={(e) => setNewPreferredDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Area / address (optional)</span>
+                <input
+                  type="text"
+                  value={newArea}
+                  onChange={(e) => setNewArea(e.target.value)}
+                  placeholder="e.g. Postcode or area"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Preferred time (optional)</span>
+                <input
+                  type="text"
+                  value={newTimeSlot}
+                  onChange={(e) => setNewTimeSlot(e.target.value)}
+                  placeholder="e.g. Morning, after 2pm"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Notes (optional)</span>
+                <textarea
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Access, parking, surface type…"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+            </div>
+            {submitError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {submitError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowNewModal(false)}
+                disabled={submitBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitNewBooking()}
+                disabled={submitBusy}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {submitBusy ? 'Submitting…' : 'Submit request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SidebarLayout>
   )
 }
 
 export function CustomerQuotesPage() {
+  const navigate = useNavigate()
+  const [quotes, setQuotes] = useState<CustomerQuoteRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [showNewModal, setShowNewModal] = useState(false)
+  const stored = getStoredUser()
+  const [qName, setQName] = useState(stored?.name ?? '')
+  const [qEmail, setQEmail] = useState(stored?.email ?? '')
+  const [qPhone, setQPhone] = useState('')
+  const [qPostcode, setQPostcode] = useState('')
+  const [qSummary, setQSummary] = useState('')
+  const [qMessage, setQMessage] = useState('')
+  const [submitBusy, setSubmitBusy] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'customer'
+
+  const loadQuotes = useCallback(async () => {
+    const t = getToken()
+    const u = getStoredUser()
+    if (!t || u?.role !== 'customer') {
+      setQuotes([])
+      setLoading(false)
+      setError(null)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ''
+      const res = await apiGet<{ quotes: CustomerQuoteRecord[] }>(`/api/customer/quotes${qs}`, t)
+      setQuotes(res.data.quotes ?? [])
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load quotes.'
+      setError(msg)
+      setQuotes([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate, statusFilter])
+
+  useEffect(() => {
+    void loadQuotes()
+  }, [loadQuotes])
+
+  const openNewModal = () => {
+    const u = getStoredUser()
+    setQName(u?.name ?? '')
+    setQEmail(u?.email ?? '')
+    setQPhone('')
+    setQPostcode('')
+    setQSummary('')
+    setQMessage('')
+    setSubmitError(null)
+    setShowNewModal(true)
+  }
+
+  const submitNewQuote = async () => {
+    const t = getToken()
+    if (!t) return
+    const contactName = qName.trim()
+    const email = qEmail.trim()
+    const serviceSummary = qSummary.trim()
+    if (!contactName || !email || !serviceSummary) {
+      const msg = 'Name, email, and a short service summary are required.'
+      setSubmitError(msg)
+      toast.error(msg)
+      return
+    }
+    setSubmitBusy(true)
+    setSubmitError(null)
+    try {
+      await apiPost<{ quote: CustomerQuoteRecord }>(
+        '/api/customer/quotes',
+        {
+          contactName,
+          email,
+          phone: qPhone.trim() || undefined,
+          postcode: qPostcode.trim() || undefined,
+          serviceSummary,
+          message: qMessage.trim() || undefined,
+        },
+        t,
+      )
+      setShowNewModal(false)
+      toast.success('Quote request submitted.')
+      await loadQuotes()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not submit quote.'
+      setSubmitError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setSubmitBusy(false)
+    }
+  }
+
+  const rows: string[][] = quotes.map((q) => [
+    formatShortRef(q._id, 'QT'),
+    q.serviceSummary.length > 48 ? `${q.serviceSummary.slice(0, 48)}…` : q.serviceSummary,
+    formatDisplayDate(q.createdAt),
+    formatStatusLabel(q.status),
+    q.status === 'quoted' ? formatGbp(q.quotedAmount) : '—',
+  ])
+  const rowKeys = quotes.map((q) => q._id)
+
   return (
     <SidebarLayout title="My Quotes" role="Customer Portal" items={customerSidebar}>
-      <DataTable
-        title="My Quotes"
-        columns={['Quote ID', 'Service', 'Submitted', 'Status']}
-        rows={[
-          ['#QT-510', 'Stone Seal + Clean', '2026-03-25', 'In Review'],
-          ['#QT-470', 'Patio Restoration', '2026-02-04', 'Approved'],
-          ['#QT-442', 'Driveway Revive', '2026-01-20', 'Rejected'],
-        ]}
-      />
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Log in with your customer account to view quote requests.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-600">Track quote requests and amounts we have sent you.</p>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <span className="whitespace-nowrap font-medium text-slate-600">Status</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+              >
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="quoted">Quoted</option>
+                <option value="accepted">Accepted</option>
+                <option value="declined">Declined</option>
+              </select>
+            </label>
+          </div>
+          {loading ? (
+            <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600 shadow-sm">Loading quotes…</p>
+          ) : error ? (
+            <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900">
+              <p className="font-medium">{error}</p>
+              <button
+                type="button"
+                onClick={() => void loadQuotes()}
+                className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Try again
+              </button>
+            </section>
+          ) : (
+            <DataTable
+              title="My quotes"
+              columns={['Reference', 'Service summary', 'Submitted', 'Status', 'Quoted amount']}
+              rows={rows}
+              rowKeys={rowKeys}
+              emptyMessage="You have no quote requests yet. Submit a new request for a tailored estimate."
+              onAddNew={openNewModal}
+              addNewLabel="New quote"
+            />
+          )}
+        </>
+      )}
+
+      {showNewModal ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-quote-title"
+        >
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="new-quote-title" className="text-lg font-semibold text-slate-900">
+              Request a quote
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">Describe the job and we will respond with pricing.</p>
+            <div className="mt-4 grid gap-3">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Your name</span>
+                <input
+                  type="text"
+                  value={qName}
+                  onChange={(e) => setQName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Email</span>
+                <input
+                  type="email"
+                  value={qEmail}
+                  onChange={(e) => setQEmail(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Phone (optional)</span>
+                <input
+                  type="text"
+                  value={qPhone}
+                  onChange={(e) => setQPhone(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Postcode (optional)</span>
+                <input
+                  type="text"
+                  value={qPostcode}
+                  onChange={(e) => setQPostcode(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Service summary</span>
+                <input
+                  type="text"
+                  value={qSummary}
+                  onChange={(e) => setQSummary(e.target.value)}
+                  placeholder="e.g. Patio clean, approx 25 sqm"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Message (optional)</span>
+                <textarea
+                  value={qMessage}
+                  onChange={(e) => setQMessage(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+            </div>
+            {submitError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {submitError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowNewModal(false)}
+                disabled={submitBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitNewQuote()}
+                disabled={submitBusy}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {submitBusy ? 'Submitting…' : 'Submit quote request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SidebarLayout>
   )
 }
