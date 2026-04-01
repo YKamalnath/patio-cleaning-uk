@@ -24,6 +24,9 @@ const userSchema = new mongoose.Schema(
       enum: ['admin', 'customer'],
       default: 'customer',
     },
+    phone: { type: String, trim: true, default: '' },
+    /** Admin-only preference: email alerts for new bookings (UI toggles this). */
+    notifyNewBookingEmails: { type: Boolean, default: true },
   },
   { timestamps: true },
 )

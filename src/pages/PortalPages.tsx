@@ -331,6 +331,15 @@ function mapUser(u: { id: string; name: string; email: string; role: string }): 
   }
 }
 
+type PortalMeUser = {
+  id: string
+  name: string
+  email: string
+  role: string
+  phone?: string
+  notifyNewBookingEmails?: boolean
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -427,6 +436,7 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -447,7 +457,7 @@ export function RegisterPage() {
     try {
       const res = await apiPost<{ user: { id: string; name: string; email: string; role: string }; token: string }>(
         '/api/auth/register',
-        { name: name.trim(), email: email.trim(), password },
+        { name: name.trim(), email: email.trim(), password, phone: phone.trim() || undefined },
       )
       const { user, token } = res.data
       setSession(token, mapUser(user))
@@ -502,10 +512,12 @@ export function RegisterPage() {
           type="tel"
           name="phone"
           autoComplete="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
           placeholder="+44 7000 000000"
           className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-300"
         />
-        <span className="mt-1 block text-xs text-slate-500">Optional — not stored on the server yet.</span>
+        <span className="mt-1 block text-xs text-slate-500">Optional — saved on your account.</span>
       </label>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>
@@ -2361,48 +2373,271 @@ export function AdminGalleryPage() {
 }
 
 export function AdminSettingsPage() {
+  const navigate = useNavigate()
+  const token = getToken()
+  const stored = getStoredUser()
+  const unauthorized = !token || stored?.role !== 'admin'
+
+  const [meLoading, setMeLoading] = useState(true)
+  const [meError, setMeError] = useState<string | null>(null)
+  const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileFormError, setProfileFormError] = useState<string | null>(null)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [notifyNewBookings, setNotifyNewBookings] = useState(true)
+  const [securityBusy, setSecurityBusy] = useState(false)
+  const [securityFormError, setSecurityFormError] = useState<string | null>(null)
+
+  const loadMe = useCallback(async () => {
+    const t = getToken()
+    const u = getStoredUser()
+    if (!t || u?.role !== 'admin') {
+      setMeLoading(false)
+      setMeError(null)
+      return
+    }
+    setMeLoading(true)
+    setMeError(null)
+    try {
+      const res = await apiGet<{ user: PortalMeUser }>('/api/auth/me', t)
+      const user = res.data.user
+      setProfileName(user.name ?? '')
+      setProfileEmail(user.email ?? '')
+      setNotifyNewBookings(user.notifyNewBookingEmails !== false)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load your profile.'
+      setMeError(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setMeLoading(false)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    void loadMe()
+  }, [loadMe])
+
+  const saveProfile = async () => {
+    const t = getToken()
+    if (!t) return
+    const name = profileName.trim()
+    const email = profileEmail.trim()
+    if (!name || !email) {
+      const msg = 'Name and email are required.'
+      setProfileFormError(msg)
+      toast.error(msg)
+      return
+    }
+    setProfileBusy(true)
+    setProfileFormError(null)
+    try {
+      const res = await apiPatch<{ user: PortalMeUser }>('/api/auth/profile', { name, email }, t)
+      const user = res.data.user
+      setSession(t, mapUser(user))
+      toast.success(res.message || 'Profile saved.')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not save profile.'
+      setProfileFormError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setProfileBusy(false)
+    }
+  }
+
+  const saveSecurityAndPrefs = async () => {
+    const t = getToken()
+    if (!t) return
+    setSecurityFormError(null)
+
+    const pwdTouched = currentPassword.length > 0 || newPassword.length > 0 || confirmPassword.length > 0
+    if (pwdTouched) {
+      if (!currentPassword || !newPassword) {
+        const msg = 'Enter your current password and a new password, or leave all password fields empty.'
+        setSecurityFormError(msg)
+        toast.error(msg)
+        return
+      }
+      if (newPassword !== confirmPassword) {
+        const msg = 'New password and confirmation do not match.'
+        setSecurityFormError(msg)
+        toast.error(msg)
+        return
+      }
+      if (newPassword.length < 8) {
+        const msg = 'New password must be at least 8 characters.'
+        setSecurityFormError(msg)
+        toast.error(msg)
+        return
+      }
+    }
+
+    setSecurityBusy(true)
+    try {
+      const prefRes = await apiPatch<{ user: PortalMeUser }>(
+        '/api/auth/preferences',
+        { notifyNewBookingEmails: notifyNewBookings },
+        t,
+      )
+      const user = prefRes.data.user
+      setNotifyNewBookings(user.notifyNewBookingEmails !== false)
+      toast.success(prefRes.message || 'Preferences saved.')
+
+      if (pwdTouched) {
+        const pwdRes = await apiPost('/api/auth/change-password', { currentPassword, newPassword }, t)
+        toast.success(pwdRes.message || 'Password updated.')
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not update security settings.'
+      setSecurityFormError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setSecurityBusy(false)
+    }
+  }
+
   return (
     <SidebarLayout title="Admin Settings" role="Admin Portal" items={adminSidebar}>
-      <section className="grid gap-4 lg:grid-cols-2">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Update Admin Profile</h3>
-          <div className="mt-4 grid gap-3">
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Full Name</span>
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" defaultValue="Admin User" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Email</span>
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" defaultValue="admin@patio.co.uk" />
-            </label>
-            <button className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-              <FiSave size={15} />
-              Save Profile
-            </button>
-          </div>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Security and System</h3>
-          <div className="mt-4 grid gap-3">
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Current Password</span>
-              <input type="password" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">New Password</span>
-              <input type="password" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" />
-            </label>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm text-slate-600">
-              <input type="checkbox" defaultChecked />
-              Enable email notifications for new bookings
-            </label>
-            <button className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600">
-              <FiSave size={15} />
-              Update Settings
-            </button>
-          </div>
-        </article>
-      </section>
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Log in with an admin account to manage settings.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : meLoading ? (
+        <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600 shadow-sm">Loading settings…</p>
+      ) : meError ? (
+        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900">
+          <p className="font-medium">{meError}</p>
+          <button
+            type="button"
+            onClick={() => void loadMe()}
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Try again
+          </button>
+        </section>
+      ) : (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Update Admin Profile</h3>
+            <p className="mt-1 text-sm text-slate-500">These details are stored in your account.</p>
+            <div className="mt-4 grid gap-3">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Full Name</span>
+                <input
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  autoComplete="name"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Email</span>
+                <input
+                  type="email"
+                  value={profileEmail}
+                  onChange={(e) => setProfileEmail(e.target.value)}
+                  autoComplete="email"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              {profileFormError ? (
+                <p className="text-sm text-rose-700" role="alert">
+                  {profileFormError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                disabled={profileBusy}
+                onClick={() => void saveProfile()}
+                className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                <FiSave size={15} />
+                {profileBusy ? 'Saving…' : 'Save Profile'}
+              </button>
+            </div>
+          </article>
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Security and notifications</h3>
+            <p className="mt-1 text-sm text-slate-500">Change your password and control booking alert preferences.</p>
+            <div className="mt-4 grid gap-3">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Current Password</span>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">New Password</span>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Confirm New Password</span>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={notifyNewBookings}
+                  onChange={(e) => setNotifyNewBookings(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Email notifications for new bookings
+              </label>
+              {securityFormError ? (
+                <p className="text-sm text-rose-700" role="alert">
+                  {securityFormError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                disabled={securityBusy}
+                onClick={() => void saveSecurityAndPrefs()}
+                className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+              >
+                <FiSave size={15} />
+                {securityBusy ? 'Saving…' : 'Update Settings'}
+              </button>
+            </div>
+          </article>
+        </section>
+      )}
     </SidebarLayout>
   )
 }
@@ -2999,69 +3234,277 @@ export function CustomerQuotesPage() {
 }
 
 export function CustomerSettingsPage() {
+  const navigate = useNavigate()
+  const token = getToken()
+  const stored = getStoredUser()
+  const unauthorized = !token || stored?.role !== 'customer'
+
+  const [meLoading, setMeLoading] = useState(true)
+  const [meError, setMeError] = useState<string | null>(null)
+  const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileFormError, setProfileFormError] = useState<string | null>(null)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordFormError, setPasswordFormError] = useState<string | null>(null)
+
+  const loadMe = useCallback(async () => {
+    const t = getToken()
+    const u = getStoredUser()
+    if (!t || u?.role !== 'customer') {
+      setMeLoading(false)
+      setMeError(null)
+      return
+    }
+    setMeLoading(true)
+    setMeError(null)
+    try {
+      const res = await apiGet<{ user: PortalMeUser }>('/api/auth/me', t)
+      const user = res.data.user
+      setProfileName(user.name ?? '')
+      setProfileEmail(user.email ?? '')
+      setProfilePhone(user.phone ?? '')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load your profile.'
+      setMeError(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setMeLoading(false)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    void loadMe()
+  }, [loadMe])
+
+  const saveProfile = async () => {
+    const t = getToken()
+    if (!t) return
+    const name = profileName.trim()
+    const email = profileEmail.trim()
+    const phone = profilePhone.trim()
+    if (!name || !email) {
+      const msg = 'Name and email are required.'
+      setProfileFormError(msg)
+      toast.error(msg)
+      return
+    }
+    setProfileBusy(true)
+    setProfileFormError(null)
+    try {
+      const res = await apiPatch<{ user: PortalMeUser }>('/api/auth/profile', { name, email, phone }, t)
+      const user = res.data.user
+      setProfilePhone(user.phone ?? '')
+      setSession(t, mapUser(user))
+      toast.success(res.message || 'Profile saved.')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not save profile.'
+      setProfileFormError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setProfileBusy(false)
+    }
+  }
+
+  const savePassword = async () => {
+    const t = getToken()
+    if (!t) return
+    if (!currentPassword || !newPassword) {
+      const msg = 'Enter your current password and a new password.'
+      setPasswordFormError(msg)
+      toast.error(msg)
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      const msg = 'New password and confirmation do not match.'
+      setPasswordFormError(msg)
+      toast.error(msg)
+      return
+    }
+    if (newPassword.length < 8) {
+      const msg = 'New password must be at least 8 characters.'
+      setPasswordFormError(msg)
+      toast.error(msg)
+      return
+    }
+    setPasswordBusy(true)
+    setPasswordFormError(null)
+    try {
+      const res = await apiPost('/api/auth/change-password', { currentPassword, newPassword }, t)
+      toast.success(res.message || 'Password updated.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not update password.'
+      setPasswordFormError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
   return (
     <SidebarLayout title="Customer Settings" role="Customer Portal" items={customerSidebar}>
-      <section className="grid gap-4 lg:grid-cols-2">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Update Profile</h3>
-          <div className="mt-4 grid gap-3">
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Full Name</span>
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" defaultValue="Customer Name" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Email</span>
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" defaultValue="customer@email.com" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Phone</span>
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" defaultValue="+44 7333 123456" />
-            </label>
-            <button className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-              <FiSave size={15} />
-              Save Changes
-            </button>
-          </div>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Change Password</h3>
-          <div className="mt-4 grid gap-3">
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Current Password</span>
-              <input type="password" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">New Password</span>
-              <input type="password" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" />
-            </label>
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Confirm New Password</span>
-              <input type="password" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400" />
-            </label>
-            <button className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600">
-              <FiLock size={15} />
-              Update Password
-            </button>
-          </div>
-        </article>
-      </section>
-      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">View Website</h3>
-        <p className="mt-1 text-sm text-slate-500">Quickly access your public website pages.</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {[
-            { label: 'Home', href: '/' },
-            { label: 'Services', href: '/services' },
-            { label: 'Gallery', href: '/gallery' },
-            { label: 'Contact', href: '/contact' },
-          ].map((linkItem) => (
-            <Link key={linkItem.label} to={linkItem.href} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
-              {linkItem.label}
-              <FiArrowUpRight size={14} />
-            </Link>
-          ))}
-        </div>
-      </article>
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Log in with your customer account to manage settings.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : meLoading ? (
+        <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600 shadow-sm">Loading settings…</p>
+      ) : meError ? (
+        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900">
+          <p className="font-medium">{meError}</p>
+          <button
+            type="button"
+            onClick={() => void loadMe()}
+            className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Try again
+          </button>
+        </section>
+      ) : (
+        <>
+          <section className="grid gap-4 lg:grid-cols-2">
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Update Profile</h3>
+              <p className="mt-1 text-sm text-slate-500">Name, email and phone are stored on your account.</p>
+              <div className="mt-4 grid gap-3">
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">Full Name</span>
+                  <input
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    autoComplete="name"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">Email</span>
+                  <input
+                    type="email"
+                    value={profileEmail}
+                    onChange={(e) => setProfileEmail(e.target.value)}
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">Phone</span>
+                  <input
+                    type="tel"
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    autoComplete="tel"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                {profileFormError ? (
+                  <p className="text-sm text-rose-700" role="alert">
+                    {profileFormError}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={profileBusy}
+                  onClick={() => void saveProfile()}
+                  className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  <FiSave size={15} />
+                  {profileBusy ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Change Password</h3>
+              <p className="mt-1 text-sm text-slate-500">Use at least 8 characters for your new password.</p>
+              <div className="mt-4 grid gap-3">
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">Current Password</span>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">New Password</span>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm text-slate-600">Confirm New Password</span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+                {passwordFormError ? (
+                  <p className="text-sm text-rose-700" role="alert">
+                    {passwordFormError}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={passwordBusy}
+                  onClick={() => void savePassword()}
+                  className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  <FiLock size={15} />
+                  {passwordBusy ? 'Updating…' : 'Update Password'}
+                </button>
+              </div>
+            </article>
+          </section>
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">View Website</h3>
+            <p className="mt-1 text-sm text-slate-500">Quickly access your public website pages.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                { label: 'Home', href: '/' },
+                { label: 'Services', href: '/services' },
+                { label: 'Gallery', href: '/gallery' },
+                { label: 'Contact', href: '/contact' },
+              ].map((linkItem) => (
+                <Link key={linkItem.label} to={linkItem.href} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
+                  {linkItem.label}
+                  <FiArrowUpRight size={14} />
+                </Link>
+              ))}
+            </div>
+          </article>
+        </>
+      )}
     </SidebarLayout>
   )
 }
