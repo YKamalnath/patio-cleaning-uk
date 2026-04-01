@@ -299,14 +299,14 @@ function SidebarLayout({
               <h2 className="text-2xl font-semibold text-slate-900 2xl:text-3xl">{title}</h2>
             </div>
             <div className="flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-3 sm:w-auto sm:justify-end lg:flex-nowrap lg:min-w-[min(100%,20rem)] xl:min-w-0 xl:max-w-[28rem] 2xl:max-w-xl">
-              <label className="relative min-w-0 flex-1 sm:min-w-[12rem] sm:flex-initial lg:flex-1 lg:max-w-md 2xl:max-w-lg">
+              {/* <label className="relative min-w-0 flex-1 sm:min-w-[12rem] sm:flex-initial lg:flex-1 lg:max-w-md 2xl:max-w-lg">
                 <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search records..."
                   className="w-full min-w-0 rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-slate-400"
                 />
-              </label>
+              </label> */}
               <button
                 onClick={() => navigate(0)}
                 className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
