@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '../lib/api'
+import { ApiError, apiDelete, apiGet, apiPatch, apiPatchFormData, apiPost, apiPostFormData } from '../lib/api'
 import { clearSession, getStoredUser, getToken, setSession, type AuthUser } from '../lib/authStorage'
 import type { IconType } from 'react-icons'
 import {
@@ -19,7 +19,6 @@ import {
   FiMonitor,
   FiPercent,
   FiSave,
-  FiSearch,
   FiSettings,
   FiTrash2,
   FiUser,
@@ -837,6 +836,16 @@ type AdminQuoteRecord = {
   status: 'pending' | 'quoted' | 'declined' | 'accepted'
   quotedAmount?: number
   adminNotes?: string
+  createdAt?: string
+}
+
+type AdminGalleryItem = {
+  _id: string
+  title: string
+  imageUrl: string
+  caption?: string
+  sortOrder: number
+  published: boolean
   createdAt?: string
 }
 
@@ -2324,51 +2333,480 @@ export function AdminQuotesPage() {
   )
 }
 
+function resolveMediaUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return ''
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl
+  const base = import.meta.env.VITE_API_URL ?? ''
+  return `${base}${pathOrUrl}`
+}
+
 export function AdminGalleryPage() {
+  const navigate = useNavigate()
+  const token = getToken()
+  const user = getStoredUser()
+  const unauthorized = !token || user?.role !== 'admin'
+
+  const [items, setItems] = useState<AdminGalleryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [newTitle, setNewTitle] = useState('')
+  const [newCaption, setNewCaption] = useState('')
+  const [newSortOrder, setNewSortOrder] = useState('0')
+  const [newPublished, setNewPublished] = useState(true)
+  const [newFile, setNewFile] = useState<File | null>(null)
+  const [uploadBusy, setUploadBusy] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const [editItem, setEditItem] = useState<AdminGalleryItem | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editCaption, setEditCaption] = useState('')
+  const [editSortOrder, setEditSortOrder] = useState('0')
+  const [editPublished, setEditPublished] = useState(true)
+  const [editReplaceFile, setEditReplaceFile] = useState<File | null>(null)
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const [deleteItem, setDeleteItem] = useState<AdminGalleryItem | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const loadGallery = useCallback(async () => {
+    const t = getToken()
+    const u = getStoredUser()
+    if (!t || u?.role !== 'admin') {
+      setItems([])
+      setLoading(false)
+      setError(null)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiGet<{ items: AdminGalleryItem[] }>('/api/admin/gallery', t)
+      setItems(res.data.items ?? [])
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not load gallery.'
+      setError(msg)
+      setItems([])
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    void loadGallery()
+  }, [loadGallery])
+
+  const submitUpload = async () => {
+    const t = getToken()
+    if (!t) return
+    const title = newTitle.trim()
+    if (!title) {
+      const msg = 'Title is required.'
+      setUploadError(msg)
+      toast.error(msg)
+      return
+    }
+    if (!newFile) {
+      const msg = 'Choose an image file to upload.'
+      setUploadError(msg)
+      toast.error(msg)
+      return
+    }
+    setUploadBusy(true)
+    setUploadError(null)
+    const fd = new FormData()
+    fd.append('title', title)
+    fd.append('caption', newCaption.trim())
+    fd.append('sortOrder', String(Number(newSortOrder) || 0))
+    fd.append('published', newPublished ? 'true' : 'false')
+    fd.append('image', newFile)
+    try {
+      await apiPostFormData<{ item: AdminGalleryItem }>('/api/admin/gallery', fd, t)
+      toast.success('Image uploaded.')
+      setNewTitle('')
+      setNewCaption('')
+      setNewSortOrder('0')
+      setNewPublished(true)
+      setNewFile(null)
+      await loadGallery()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Upload failed.'
+      setUploadError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setUploadBusy(false)
+    }
+  }
+
+  const openEdit = (item: AdminGalleryItem) => {
+    setEditItem(item)
+    setEditTitle(item.title)
+    setEditCaption(item.caption ?? '')
+    setEditSortOrder(String(item.sortOrder ?? 0))
+    setEditPublished(item.published !== false)
+    setEditReplaceFile(null)
+    setEditError(null)
+  }
+
+  const submitEdit = async () => {
+    if (!editItem) return
+    const t = getToken()
+    if (!t) return
+    const title = editTitle.trim()
+    if (!title) {
+      const msg = 'Title is required.'
+      setEditError(msg)
+      toast.error(msg)
+      return
+    }
+    setEditBusy(true)
+    setEditError(null)
+    try {
+      if (editReplaceFile) {
+        const fd = new FormData()
+        fd.append('title', title)
+        fd.append('caption', editCaption.trim())
+        fd.append('sortOrder', String(Number(editSortOrder) || 0))
+        fd.append('published', editPublished ? 'true' : 'false')
+        fd.append('image', editReplaceFile)
+        await apiPatchFormData<{ item: AdminGalleryItem }>(`/api/admin/gallery/${editItem._id}`, fd, t)
+      } else {
+        await apiPatch<{ item: AdminGalleryItem }>(
+          `/api/admin/gallery/${editItem._id}`,
+          {
+            title,
+            caption: editCaption.trim(),
+            sortOrder: Number(editSortOrder) || 0,
+            published: editPublished,
+          },
+          t,
+        )
+      }
+      toast.success('Gallery item updated.')
+      setEditItem(null)
+      await loadGallery()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Could not save changes.'
+      setEditError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteItem) return
+    const t = getToken()
+    if (!t) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await apiDelete<{ id: string }>(`/api/admin/gallery/${deleteItem._id}`, t)
+      toast.success('Gallery item removed.')
+      setDeleteItem(null)
+      await loadGallery()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Delete failed.'
+      setDeleteError(msg)
+      toast.error(msg)
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        navigate('/portal/login', { replace: true })
+      }
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const fileInputId = 'admin-gallery-file'
+  const editFileInputId = 'admin-gallery-edit-file'
+
   return (
     <SidebarLayout title="Gallery Management" role="Admin Portal" items={adminSidebar}>
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Media Library</h3>
-          <p className="mt-1 text-sm text-slate-500">Add, edit and remove gallery images. Supports Cloudinary or local storage uploads.</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {['before-clean.jpg', 'after-clean.jpg', 'driveway-results.jpg', 'stone-restoration.jpg'].map((imageName) => (
-              <div key={imageName} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-slate-700">{imageName}</p>
-                  <FiImage className="text-slate-400" />
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button className="rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">Edit</button>
-                  <button className="rounded-md border border-rose-200 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50">Delete</button>
-                </div>
+      {unauthorized ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-medium">Admin sign-in required</p>
+          <p className="mt-1 text-sm text-amber-800">Sign in with an admin account to manage gallery images.</p>
+          <Link
+            to="/portal/login"
+            className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Go to login
+          </Link>
+        </section>
+      ) : null}
+
+      {!unauthorized && error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!unauthorized && loading ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+          Loading gallery…
+        </section>
+      ) : null}
+
+      {!unauthorized && !loading ? (
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] 2xl:gap-6">
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
+            <h3 className="text-lg font-semibold text-slate-900">Gallery items</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Files live under <code className="rounded bg-slate-100 px-1 text-xs">server/uploads/gallery</code>; MongoDB stores the public path only (
+              <code className="rounded bg-slate-100 px-1 text-xs">/uploads/gallery/…</code>).
+            </p>
+            {items.length === 0 ? (
+              <p className="mt-6 text-sm text-slate-500">No images yet. Upload one using the form on the right.</p>
+            ) : (
+              <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+                {items.map((item) => (
+                  <li key={item._id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <img src={resolveMediaUrl(item.imageUrl)} alt="" className="h-36 w-full object-cover" />
+                    <div className="p-3">
+                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                      {item.caption ? <p className="mt-1 line-clamp-2 text-xs text-slate-600">{item.caption}</p> : null}
+                      <p className="mt-2 text-xs text-slate-500">
+                        Order {item.sortOrder} · {item.published ? 'Published' : 'Draft'}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(item)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteItem(item)
+                            setDeleteError(null)
+                          }}
+                          className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm 2xl:p-6">
+            <h3 className="text-lg font-semibold text-slate-900">Upload new image</h3>
+            <p className="mt-1 text-sm text-slate-500">JPEG, PNG, GIF, or WebP up to 10MB (Multer disk storage).</p>
+            <div className="mt-4 grid gap-3">
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Title</span>
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  placeholder="e.g. Patio after clean — Bromley"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Caption (optional)</span>
+                <input
+                  value={newCaption}
+                  onChange={(e) => setNewCaption(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Sort order</span>
+                <input
+                  type="number"
+                  value={newSortOrder}
+                  onChange={(e) => setNewSortOrder(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={newPublished}
+                  onChange={(e) => setNewPublished(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Published (visible on public gallery)
+              </label>
+              <div>
+                <span className="mb-1 block text-sm text-slate-600">Image file</span>
+                <input
+                  id={fileInputId}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
+                  onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+                />
               </div>
-            ))}
-          </div>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Upload New Image</h3>
-          <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <FiImage className="mx-auto text-slate-400" size={28} />
-            <p className="mt-3 text-sm text-slate-600">Drag and drop files, or click to browse.</p>
-            <p className="mt-1 text-xs text-slate-500">Recommended: JPG/PNG up to 10MB</p>
-            <button className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Select Files</button>
-          </div>
-          <div className="mt-4 grid gap-3">
-            <label>
-              <span className="mb-1 block text-sm text-slate-600">Storage Provider</span>
-              <select className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400">
-                <option>Cloudinary</option>
-                <option>Local Storage</option>
-              </select>
-            </label>
-            <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600">
+            </div>
+            {uploadError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {uploadError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={uploadBusy}
+              onClick={() => void submitUpload()}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
               <FiArrowUpRight size={15} />
-              Upload Image
+              {uploadBusy ? 'Uploading…' : 'Upload to gallery'}
             </button>
+          </article>
+        </section>
+      ) : null}
+
+      {editItem ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gallery-edit-title"
+        >
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="gallery-edit-title" className="text-lg font-semibold text-slate-900">
+                Edit gallery item
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditItem(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <img src={resolveMediaUrl(editItem.imageUrl)} alt="" className="max-h-40 w-full rounded-xl object-cover" />
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Title</span>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Caption</span>
+                <input
+                  value={editCaption}
+                  onChange={(e) => setEditCaption(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm text-slate-600">Sort order</span>
+                <input
+                  type="number"
+                  value={editSortOrder}
+                  onChange={(e) => setEditSortOrder(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editPublished}
+                  onChange={(e) => setEditPublished(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Published
+              </label>
+              <div>
+                <span className="mb-1 block text-sm text-slate-600">Replace image (optional)</span>
+                <input
+                  id={editFileInputId}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-800"
+                  onChange={(e) => setEditReplaceFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            </div>
+            {editError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {editError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditItem(null)}
+                disabled={editBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitEdit()}
+                disabled={editBusy}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editBusy ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
           </div>
-        </article>
-      </section>
+        </div>
+      ) : null}
+
+      {deleteItem ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gallery-delete-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="gallery-delete-title" className="text-lg font-semibold text-slate-900">
+              Remove gallery item
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Delete <span className="font-semibold">{deleteItem.title}</span>? The image file will be removed from the server.
+            </p>
+            {deleteError ? (
+              <p className="mt-3 text-sm text-rose-700" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteItem(null)}
+                disabled={deleteBusy}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleteBusy}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SidebarLayout>
   )
 }

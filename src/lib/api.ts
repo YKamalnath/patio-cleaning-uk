@@ -31,6 +31,34 @@ async function parseJson(res: Response) {
   }
 }
 
+export async function apiPostFormData<T>(path: string, formData: FormData, token: string): Promise<ApiSuccess<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const data = await parseJson(res)
+  if (!res.ok || data.success === false) {
+    const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    throw new ApiError(msg, res.status, data.errors)
+  }
+  return data as ApiSuccess<T>
+}
+
+export async function apiPatchFormData<T>(path: string, formData: FormData, token: string): Promise<ApiSuccess<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const data = await parseJson(res)
+  if (!res.ok || data.success === false) {
+    const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    throw new ApiError(msg, res.status, data.errors)
+  }
+  return data as ApiSuccess<T>
+}
+
 export async function apiPost<T>(path: string, body: Record<string, unknown>, token?: string | null): Promise<ApiSuccess<T>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
@@ -39,6 +67,16 @@ export async function apiPost<T>(path: string, body: Record<string, unknown>, to
     headers,
     body: JSON.stringify(body),
   })
+  const data = await parseJson(res)
+  if (!res.ok || data.success === false) {
+    const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
+    throw new ApiError(msg, res.status, data.errors)
+  }
+  return data as ApiSuccess<T>
+}
+
+export async function apiGetPublic<T>(path: string): Promise<ApiSuccess<T>> {
+  const res = await fetch(`${API_BASE}${path}`)
   const data = await parseJson(res)
   if (!res.ok || data.success === false) {
     const msg = typeof data.message === 'string' ? data.message : `Request failed (${res.status})`
