@@ -40,6 +40,7 @@ router.post(
 )
 
 router.get('/bookings', bookingController.listMyBookings)
+router.get('/bookings/confirm-payment', bookingController.confirmBookingPayment)
 
 /**
  * Quote requests — create and list own.

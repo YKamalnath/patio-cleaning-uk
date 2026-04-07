@@ -3210,15 +3210,30 @@ export function CustomerBookingsPage() {
 
   useEffect(() => {
     const paymentState = searchParams.get('payment')
+    const sessionId = searchParams.get('session_id')
     if (!paymentState) return
-    if (paymentState === 'success') {
-      toast.success('Payment received. Your booking is now confirmed.')
-      void loadBookings()
-    } else if (paymentState === 'cancelled') {
-      toast.message('Payment cancelled. Your booking remains pending.')
-      void loadBookings()
+    const handlePaymentRedirect = async () => {
+      if (paymentState === 'success') {
+        const t = getToken()
+        if (t && sessionId) {
+          try {
+            await apiGet(`/api/customer/bookings/confirm-payment?session_id=${encodeURIComponent(sessionId)}`, t)
+            toast.success('Payment received. Your booking is now confirmed. Invoice generated.')
+          } catch (err) {
+            const msg = err instanceof ApiError ? err.message : 'Payment confirmation is still processing.'
+            toast.message(msg)
+          }
+        } else {
+          toast.message('Payment success received. Refreshing booking status.')
+        }
+        await loadBookings()
+      } else if (paymentState === 'cancelled') {
+        toast.message('Payment cancelled. Your booking remains pending.')
+        await loadBookings()
+      }
+      setSearchParams({}, { replace: true })
     }
-    setSearchParams({}, { replace: true })
+    void handlePaymentRedirect()
   }, [loadBookings, searchParams, setSearchParams])
 
   const openNewModal = () => {

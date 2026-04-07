@@ -1,4 +1,5 @@
 import { Booking } from '../models/Booking.js'
+import { Invoice } from '../models/Invoice.js'
 import Stripe from 'stripe'
 import {
   BOOKING_PAYMENT_AMOUNT_GBP,
@@ -30,6 +31,59 @@ function getClientUrl(req) {
   if (CLIENT_APP_URL) return CLIENT_APP_URL
   if (req.headers.origin) return req.headers.origin
   return 'http://localhost:5173'
+}
+
+function makeInvoiceNumber(bookingId) {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `INV-${y}${m}${d}-${bookingId.toString().slice(-6).toUpperCase()}`
+}
+
+async function createInvoiceForBooking(booking, session) {
+  const existing = await Invoice.findOne({ booking: booking._id })
+  if (existing) return existing
+  try {
+    return await Invoice.create({
+      invoiceNumber: makeInvoiceNumber(booking._id),
+      booking: booking._id,
+      customer: booking.customer,
+      amount: booking.amount,
+      currency: booking.currency,
+      stripeCheckoutSessionId: session?.id || booking.stripeCheckoutSessionId,
+      stripePaymentIntentId:
+        typeof session?.payment_intent === 'string' ? session.payment_intent : booking.stripePaymentIntentId,
+      status: 'paid',
+      issuedAt: new Date(),
+      paidAt: new Date(),
+    })
+  } catch (error) {
+    if (error?.code === 11000) {
+      return Invoice.findOne({ booking: booking._id })
+    }
+    throw error
+  }
+}
+
+async function markBookingPaidFromSession(session) {
+  const bookingId = session?.metadata?.bookingId
+  if (!bookingId) return null
+  const booking = await Booking.findById(bookingId)
+  if (!booking) return null
+
+  if (booking.paymentStatus !== 'paid') {
+    booking.status = 'confirmed'
+    booking.paymentStatus = 'paid'
+    booking.stripeCheckoutSessionId = session.id
+    if (typeof session.payment_intent === 'string') {
+      booking.stripePaymentIntentId = session.payment_intent
+    }
+    await booking.save()
+  }
+
+  const invoice = await createInvoiceForBooking(booking, session)
+  return { booking, invoice }
 }
 
 /**
@@ -129,15 +183,7 @@ export const stripeWebhook = asyncHandler(async (req, res) => {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
-    const bookingId = session?.metadata?.bookingId
-    if (bookingId) {
-      await Booking.findByIdAndUpdate(bookingId, {
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        stripeCheckoutSessionId: session.id,
-        stripePaymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
-      })
-    }
+    await markBookingPaidFromSession(session)
   }
 
   if (event.type === 'checkout.session.expired') {
@@ -152,6 +198,38 @@ export const stripeWebhook = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json({ received: true })
+})
+
+/**
+ * Customer: fallback confirmation from success redirect (if webhook is delayed).
+ */
+export const confirmBookingPayment = asyncHandler(async (req, res) => {
+  requireStripe()
+  const sessionId = String(req.query.session_id || '').trim()
+  if (!sessionId) {
+    return sendError(res, { message: 'Missing Stripe session id', statusCode: 400 })
+  }
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId)
+  if (!session) {
+    return sendError(res, { message: 'Stripe session not found', statusCode: 404 })
+  }
+  if (session.metadata?.customerId !== req.user.id) {
+    return sendError(res, { message: 'Unauthorized payment session', statusCode: 403 })
+  }
+  if (session.payment_status !== 'paid') {
+    return sendError(res, { message: 'Payment not completed yet', statusCode: 409 })
+  }
+
+  const result = await markBookingPaidFromSession(session)
+  if (!result) {
+    return sendError(res, { message: 'Booking not found for session', statusCode: 404 })
+  }
+
+  return sendSuccess(res, {
+    message: 'Payment confirmed and invoice generated',
+    data: { booking: result.booking, invoice: result.invoice },
+  })
 })
 
 /**
