@@ -23,6 +23,7 @@ export function createApp() {
       credentials: true,
     }),
   )
+  app.use('/api/public/stripe/webhook', express.raw({ type: 'application/json' }))
   app.use(express.json({ limit: '1mb' }))
 
   /** Uploaded gallery files — `imageUrl` in DB is e.g. `/uploads/gallery/<file>` */

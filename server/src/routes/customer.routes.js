@@ -14,6 +14,19 @@ router.use(authenticate, authorizeRoles('customer'))
  * Customer bookings — create and list own.
  */
 router.post(
+  '/bookings/checkout-session',
+  [
+    body('serviceType').trim().notEmpty(),
+    body('preferredDate').isISO8601().toDate(),
+    body('area').optional().trim(),
+    body('timeSlot').optional().trim(),
+    body('notes').optional().trim(),
+  ],
+  validateRequest,
+  bookingController.createBookingCheckoutSession,
+)
+
+router.post(
   '/bookings',
   [
     body('serviceType').trim().notEmpty(),

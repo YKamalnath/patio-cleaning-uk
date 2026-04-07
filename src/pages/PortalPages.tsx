@@ -26,7 +26,7 @@ import {
   FiX,
   FiPlus,
 } from 'react-icons/fi'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { services as serviceOptions } from '../data/siteData'
 
 type SidebarItem = {
@@ -793,6 +793,9 @@ type CustomerBookingRecord = {
   timeSlot?: string
   notes?: string
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  paymentStatus?: 'unpaid' | 'paid' | 'failed' | 'refunded'
+  amount?: number
+  currency?: string
   createdAt?: string
 }
 
@@ -3158,6 +3161,7 @@ export function CustomerDashboardPage() {
 
 export function CustomerBookingsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [bookings, setBookings] = useState<CustomerBookingRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -3204,6 +3208,19 @@ export function CustomerBookingsPage() {
     void loadBookings()
   }, [loadBookings])
 
+  useEffect(() => {
+    const paymentState = searchParams.get('payment')
+    if (!paymentState) return
+    if (paymentState === 'success') {
+      toast.success('Payment received. Your booking is now confirmed.')
+      void loadBookings()
+    } else if (paymentState === 'cancelled') {
+      toast.message('Payment cancelled. Your booking remains pending.')
+      void loadBookings()
+    }
+    setSearchParams({}, { replace: true })
+  }, [loadBookings, searchParams, setSearchParams])
+
   const openNewModal = () => {
     setNewServiceType(serviceOptions[0] ?? '')
     setNewPreferredDate('')
@@ -3228,8 +3245,12 @@ export function CustomerBookingsPage() {
     setSubmitBusy(true)
     setSubmitError(null)
     try {
-      await apiPost<{ booking: CustomerBookingRecord }>(
-        '/api/customer/bookings',
+      const response = await apiPost<{
+        booking: CustomerBookingRecord
+        checkoutSessionId: string
+        checkoutUrl?: string
+      }>(
+        '/api/customer/bookings/checkout-session',
         {
           serviceType,
           preferredDate,
@@ -3239,11 +3260,13 @@ export function CustomerBookingsPage() {
         },
         t,
       )
+      if (!response.data.checkoutUrl) {
+        throw new Error('Stripe checkout URL is missing from server response')
+      }
+      window.location.assign(response.data.checkoutUrl)
       setShowNewModal(false)
-      toast.success('Booking request submitted.')
-      await loadBookings()
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Could not create booking.'
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not create booking.'
       setSubmitError(msg)
       toast.error(msg)
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -3313,7 +3336,7 @@ export function CustomerBookingsPage() {
             <h3 id="new-booking-title" className="text-lg font-semibold text-slate-900">
               New booking request
             </h3>
-            <p className="mt-1 text-sm text-slate-600">We will confirm your slot by email or phone.</p>
+            <p className="mt-1 text-sm text-slate-600">Continue to secure Stripe payment to confirm your slot.</p>
             <div className="mt-4 grid gap-3">
               <label>
                 <span className="mb-1 block text-sm text-slate-600">Service type</span>
@@ -3389,7 +3412,7 @@ export function CustomerBookingsPage() {
                 disabled={submitBusy}
                 className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
-                {submitBusy ? 'Submitting…' : 'Submit request'}
+                {submitBusy ? 'Redirecting…' : 'Pay & confirm'}
               </button>
             </div>
           </div>
