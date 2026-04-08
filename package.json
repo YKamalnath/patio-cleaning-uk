@@ -3,8 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "dev": "concurrently -n client,api -c cyan,magenta \"vite\" \"nodemon server/src/server.js\"",
+    "dev": "node scripts/check-node.mjs && concurrently -n client,api -c cyan,magenta \"vite\" \"nodemon server/src/server.js\"",
     "dev:client": "vite",
     "dev:server": "nodemon server/src/server.js",
     "start": "node server/src/server.js",

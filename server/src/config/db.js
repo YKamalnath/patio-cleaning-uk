@@ -13,10 +13,16 @@ export async function connectDB() {
       serverSelectionTimeoutMS: 10_000,
     })
     if (NODE_ENV === 'development') {
-      console.log('[db] MongoDB Atlas connected')
+      console.log('[db] MongoDB connected')
     }
   } catch (err) {
     console.error('[db] Connection failed:', err.message)
+    if (/ENOTFOUND|querySrv/i.test(String(err.message))) {
+      console.error(
+        '[db] Hint: Check MONGO_URI — use your real Atlas hostname (from Atlas → Connect), not the example placeholder. ' +
+          'For local dev: run `docker compose up -d mongo` and set MONGO_URI=mongodb://127.0.0.1:27017/patio-cleaning',
+      )
+    }
     process.exit(1)
   }
 }
