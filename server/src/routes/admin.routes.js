@@ -8,6 +8,8 @@ import * as quoteController from '../controllers/quote.controller.js'
 import { authenticate } from '../middleware/auth.js'
 import { authorizeRoles } from '../middleware/authorizeRoles.js'
 import { validateRequest } from '../middleware/validate.js'
+import { validateGalleryRequest } from '../middleware/validateGalleryRequest.js'
+import { uploadGalleryImage } from '../middleware/uploadGallery.js'
 
 const router = Router()
 
@@ -116,33 +118,41 @@ router.delete(
   quoteController.deleteQuote,
 )
 
-/** Gallery (admin CRUD + list all) */
+/** Gallery (admin CRUD + list all) — images via Multer; DB stores public path only */
 router.get('/gallery', galleryController.listAllGallery)
+
+const galleryPublishedField = body('published')
+  .optional()
+  .custom((value) => {
+    if (value === true || value === false) return true
+    if (value === 'true' || value === 'false' || value === '1' || value === '0' || value === '') return true
+    throw new Error('Invalid published flag')
+  })
 
 router.post(
   '/gallery',
+  uploadGalleryImage.single('image'),
   [
     body('title').trim().notEmpty(),
-    body('imageUrl').trim().isURL({ require_tld: false }),
     body('caption').optional().trim(),
-    body('sortOrder').optional().isInt(),
-    body('published').optional().isBoolean(),
+    body('sortOrder').optional({ values: 'falsy' }).isInt(),
+    galleryPublishedField,
   ],
-  validateRequest,
+  validateGalleryRequest,
   galleryController.createGalleryItem,
 )
 
 router.patch(
   '/gallery/:id',
+  uploadGalleryImage.single('image'),
   [
     param('id').isMongoId(),
     body('title').optional().trim().notEmpty(),
-    body('imageUrl').optional().trim().isURL({ require_tld: false }),
     body('caption').optional().trim(),
-    body('sortOrder').optional().isInt(),
-    body('published').optional().isBoolean(),
+    body('sortOrder').optional({ values: 'falsy' }).isInt(),
+    galleryPublishedField,
   ],
-  validateRequest,
+  validateGalleryRequest,
   galleryController.updateGalleryItem,
 )
 

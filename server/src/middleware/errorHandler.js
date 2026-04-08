@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import multer from 'multer'
 import { NODE_ENV } from '../config/env.js'
 import { sendError } from '../utils/response.js'
 
@@ -26,6 +27,17 @@ export function errorHandler(err, req, res, next) {
 
   if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
     return sendError(res, { message: 'Invalid or expired token', statusCode: 401 })
+  }
+
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return sendError(res, { message: 'Image too large (max 10MB)', statusCode: 400 })
+    }
+    return sendError(res, { message: err.message || 'Upload failed', statusCode: 400 })
+  }
+
+  if (err.message === 'Only JPEG, PNG, GIF, and WebP images are allowed') {
+    return sendError(res, { message: err.message, statusCode: 400 })
   }
 
   const statusCode = err.statusCode || err.status || 500

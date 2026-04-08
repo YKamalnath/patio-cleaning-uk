@@ -1,4 +1,5 @@
 import { Route, Routes, useLocation } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { WhatsAppFloat } from './components/WhatsAppFloat'
@@ -59,6 +60,7 @@ function App() {
       </main>
       {!isPortalRoute ? <Footer /> : null}
       {!isPortalRoute ? <WhatsAppFloat /> : null}
+      <Toaster position="top-right" richColors closeButton />
     </div>
   )
 }

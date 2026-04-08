@@ -13,13 +13,18 @@ function signToken(user) {
 }
 
 function userResponse(user) {
-  return {
+  const base = {
     id: user._id,
     name: user.name,
     email: user.email,
     role: user.role,
+    phone: user.phone ?? '',
     createdAt: user.createdAt,
   }
+  if (user.role === 'admin') {
+    base.notifyNewBookingEmails = user.notifyNewBookingEmails !== false
+  }
+  return base
 }
 
 /**
@@ -36,6 +41,7 @@ export const register = asyncHandler(async (req, res) => {
     email,
     password,
     role: 'customer',
+    phone: typeof req.body.phone === 'string' ? req.body.phone.trim() : '',
   })
   const token = signToken(user)
   return sendSuccess(res, {
@@ -74,4 +80,73 @@ export const me = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'User not found', statusCode: 404 })
   }
   return sendSuccess(res, { data: { user: userResponse(user) } })
+})
+
+/**
+ * PATCH /api/auth/profile — update name, email, and/or phone (authenticated).
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const { name, email, phone } = req.body
+  const user = await User.findById(req.user.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: 404 })
+  }
+  if (email !== undefined && email !== user.email) {
+    const taken = await User.findOne({ email, _id: { $ne: user._id } })
+    if (taken) {
+      return sendError(res, { message: 'Email already in use', statusCode: 409 })
+    }
+    user.email = email
+  }
+  if (name !== undefined) {
+    user.name = name
+  }
+  if (phone !== undefined) {
+    user.phone = typeof phone === 'string' ? phone.trim() : ''
+  }
+  await user.save()
+  const fresh = await User.findById(user._id)
+  return sendSuccess(res, {
+    message: 'Profile updated',
+    data: { user: userResponse(fresh) },
+  })
+})
+
+/**
+ * POST /api/auth/change-password
+ */
+export const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  const user = await User.findById(req.user.id).select('+password')
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: 404 })
+  }
+  const ok = await user.comparePassword(currentPassword)
+  if (!ok) {
+    return sendError(res, { message: 'Current password is incorrect', statusCode: 400 })
+  }
+  user.password = newPassword
+  await user.save()
+  return sendSuccess(res, { message: 'Password updated' })
+})
+
+/**
+ * PATCH /api/auth/preferences — admin only (notification toggles).
+ */
+export const updatePreferences = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return sendError(res, { message: 'Forbidden', statusCode: 403 })
+  }
+  const { notifyNewBookingEmails } = req.body
+  const user = await User.findById(req.user.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: 404 })
+  }
+  user.notifyNewBookingEmails = Boolean(notifyNewBookingEmails)
+  await user.save()
+  const fresh = await User.findById(user._id)
+  return sendSuccess(res, {
+    message: 'Preferences saved',
+    data: { user: userResponse(fresh) },
+  })
 })
