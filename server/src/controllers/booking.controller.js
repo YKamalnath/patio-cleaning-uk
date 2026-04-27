@@ -48,7 +48,7 @@ async function createInvoiceForBooking(booking, session) {
     return await Invoice.create({
       invoiceNumber: makeInvoiceNumber(booking._id),
       booking: booking._id,
-      customer: booking.customer,
+      ...(booking.customer ? { customer: booking.customer } : {}),
       amount: booking.amount,
       currency: booking.currency,
       stripeCheckoutSessionId: session?.id || booking.stripeCheckoutSessionId,
@@ -90,9 +90,14 @@ async function markBookingPaidFromSession(session) {
  * Customer: create a booking linked to authenticated user.
  */
 export const createBooking = asyncHandler(async (req, res) => {
+  const { serviceType, preferredDate, area, timeSlot, notes } = req.body
   const booking = await Booking.create({
     customer: req.user.id,
-    ...req.body,
+    serviceType,
+    preferredDate,
+    area,
+    timeSlot,
+    notes,
     status: 'pending',
     paymentStatus: 'unpaid',
     amount: BOOKING_PAYMENT_AMOUNT_GBP,
@@ -115,9 +120,14 @@ export const createBookingCheckoutSession = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Invalid booking payment amount configured', statusCode: 500 })
   }
 
+  const { serviceType, preferredDate, area, timeSlot, notes } = req.body
   const booking = await Booking.create({
     customer: req.user.id,
-    ...req.body,
+    serviceType,
+    preferredDate,
+    area,
+    timeSlot,
+    notes,
     status: 'pending',
     paymentStatus: 'unpaid',
     amount,
@@ -161,6 +171,106 @@ export const createBookingCheckoutSession = asyncHandler(async (req, res) => {
       checkoutUrl: session.url,
       stripePublishableKey: STRIPE_PUBLISHABLE_KEY || null,
     },
+  })
+})
+
+/**
+ * Public guest: create pending booking without an account and Stripe Checkout Session.
+ */
+export const createGuestBookingCheckoutSession = asyncHandler(async (req, res) => {
+  requireStripe()
+  const amount = BOOKING_PAYMENT_AMOUNT_GBP
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return sendError(res, { message: 'Invalid booking payment amount configured', statusCode: 500 })
+  }
+
+  const { guestName, guestEmail, guestPhone, serviceType, preferredDate, area, timeSlot, notes } = req.body
+
+  const booking = await Booking.create({
+    guestName,
+    guestEmail,
+    guestPhone,
+    serviceType,
+    preferredDate,
+    area,
+    timeSlot,
+    notes,
+    status: 'pending',
+    paymentStatus: 'unpaid',
+    amount,
+    currency: STRIPE_CURRENCY,
+  })
+
+  const clientUrl = getClientUrl(req)
+  const unitAmount = Math.round(amount * 100)
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    customer_email: guestEmail,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: STRIPE_CURRENCY,
+          unit_amount: unitAmount,
+          product_data: {
+            name: `Patio cleaning booking (${booking.serviceType})`,
+            description: `Booking reference ${booking._id.toString().slice(-6).toUpperCase()}`,
+          },
+        },
+      },
+    ],
+    metadata: {
+      bookingId: booking._id.toString(),
+      guestBooking: 'true',
+    },
+    success_url: `${clientUrl}/book?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${clientUrl}/book?payment=cancelled&booking_id=${booking._id.toString()}`,
+  })
+
+  booking.stripeCheckoutSessionId = session.id
+  await booking.save()
+
+  return sendSuccess(res, {
+    message: 'Checkout session created',
+    statusCode: 201,
+    data: {
+      booking,
+      checkoutSessionId: session.id,
+      checkoutUrl: session.url,
+      stripePublishableKey: STRIPE_PUBLISHABLE_KEY || null,
+    },
+  })
+})
+
+/**
+ * Public guest: confirm payment after Stripe redirect (when webhook is delayed).
+ */
+export const confirmGuestBookingPayment = asyncHandler(async (req, res) => {
+  requireStripe()
+  const sessionId = String(req.query.session_id || '').trim()
+  if (!sessionId) {
+    return sendError(res, { message: 'Missing Stripe session id', statusCode: 400 })
+  }
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId)
+  if (!session) {
+    return sendError(res, { message: 'Stripe session not found', statusCode: 404 })
+  }
+  if (session.metadata?.guestBooking !== 'true') {
+    return sendError(res, { message: 'Invalid guest checkout session', statusCode: 403 })
+  }
+  if (session.payment_status !== 'paid') {
+    return sendError(res, { message: 'Payment not completed yet', statusCode: 409 })
+  }
+
+  const result = await markBookingPaidFromSession(session)
+  if (!result) {
+    return sendError(res, { message: 'Booking not found for session', statusCode: 404 })
+  }
+
+  return sendSuccess(res, {
+    message: 'Payment confirmed and invoice generated',
+    data: { booking: result.booking, invoice: result.invoice },
   })
 })
 

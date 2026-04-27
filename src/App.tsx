@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { WhatsAppFloat } from './components/WhatsAppFloat'
+import { BookPage } from './pages/BookPage'
 import { AboutPage } from './pages/AboutPage'
 import { AreasPage } from './pages/AreasPage'
 import { ContactPage } from './pages/ContactPage'
@@ -43,6 +44,7 @@ function App() {
           <Route path="/gallery" element={<GalleryPage />} />
           <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/book" element={<BookPage />} />
           <Route path="/portal" element={<PortalLandingPage />} />
           <Route path="/portal/login" element={<LoginPage />} />
           <Route path="/portal/register" element={<RegisterPage />} />

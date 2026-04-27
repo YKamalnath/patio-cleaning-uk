@@ -818,6 +818,9 @@ type PopulatedCustomerRef = { _id?: string; name?: string; email?: string }
 type AdminBookingRecord = {
   _id: string
   customer?: PopulatedCustomerRef | string
+  guestName?: string
+  guestEmail?: string
+  guestPhone?: string
   serviceType: string
   area?: string
   preferredDate: string
@@ -859,6 +862,21 @@ function customerDisplayLabel(customer: PopulatedCustomerRef | string | undefine
   const email = customer.email?.trim()
   if (name && email) return `${name} · ${email}`
   return name || email || '—'
+}
+
+function bookingCustomerLabel(b: {
+  customer?: PopulatedCustomerRef | string
+  guestName?: string
+  guestEmail?: string
+}): string {
+  if (typeof b.customer === 'object' && b.customer != null) {
+    return customerDisplayLabel(b.customer)
+  }
+  const name = b.guestName?.trim()
+  const email = b.guestEmail?.trim()
+  if (name && email) return `${name} · ${email} (guest)`
+  if (email) return `${email} (guest)`
+  return name ? `${name} (guest)` : 'Guest booking'
 }
 
 function dateInputFromIso(iso: string): string {
@@ -1409,9 +1427,7 @@ export function AdminBookingsPage() {
 
   const bookingRows: string[][] = bookings.map((b) => [
     formatShortRef(b._id, 'BK'),
-    customerDisplayLabel(
-      typeof b.customer === 'object' && b.customer != null ? b.customer : undefined,
-    ),
+    bookingCustomerLabel(b),
     b.serviceType,
     formatDisplayDate(b.preferredDate),
     formatStatusLabel(b.status),
@@ -1616,14 +1632,15 @@ export function AdminBookingsPage() {
                 </div>
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer</dt>
-                  <dd className="mt-1 text-slate-900">
-                    {customerDisplayLabel(
-                      typeof viewBooking.customer === 'object' && viewBooking.customer != null
-                        ? viewBooking.customer
-                        : undefined,
-                    )}
-                  </dd>
+                  <dd className="mt-1 text-slate-900">{bookingCustomerLabel(viewBooking)}</dd>
                 </div>
+                {viewBooking.guestPhone?.trim() &&
+                (typeof viewBooking.customer !== 'object' || viewBooking.customer == null) ? (
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</dt>
+                    <dd className="mt-1 text-slate-900">{viewBooking.guestPhone.trim()}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Service</dt>
                   <dd className="mt-1 text-slate-900">{viewBooking.serviceType}</dd>
