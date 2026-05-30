@@ -3,7 +3,7 @@
  * Handles errors and avoids duplicate listeners in dev (nodemon reloads).
  */
 import mongoose from 'mongoose'
-import { MONGO_URI, NODE_ENV } from './env.js'
+import { DEV_ALLOW_DB_FAILURE, MONGO_URI, NODE_ENV } from './env.js'
 
 mongoose.set('strictQuery', true)
 
@@ -23,11 +23,23 @@ export async function connectDB() {
           'For local dev: run `docker compose up -d mongo` and set MONGO_URI=mongodb://127.0.0.1:27017/patio-cleaning',
       )
     }
+    if (DEV_ALLOW_DB_FAILURE) {
+      console.warn(
+        '[db] Continuing without database (DEV_ALLOW_DB_FAILURE=true). Start Mongo or fix MONGO_URI for full API behaviour.',
+      )
+      return
+    }
     process.exit(1)
   }
 }
 
+export function isDbConnected() {
+  return mongoose.connection.readyState === 1
+}
+
 /** Graceful shutdown helper for tests or process managers */
 export async function disconnectDB() {
-  await mongoose.connection.close()
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close()
+  }
 }

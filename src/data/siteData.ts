@@ -1,8 +1,8 @@
 export const company = {
-  name: 'Elite Patio Care UK',
+  name: 'Outdoor Cleaning Masters',
   phoneDisplay: '020 3817 2644',
   phoneHref: 'tel:+442038172644',
-  whatsappHref: 'https://wa.me/447700900321?text=Hi%20Elite%20Patio%20Care%2C%20I%20would%20like%20a%20free%20quote.',
+  whatsappHref: 'https://wa.me/447700900321?text=Hi%20Outdoor%20Cleaning%20Masters%2C%20I%20would%20like%20a%20free%20quote.',
   email: 'hello@elitepatiocare.co.uk',
   address: '14 Oakfield Road, Croydon, London, CR0 2XN',
 }

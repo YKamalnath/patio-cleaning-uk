@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { WhatsAppFloat } from './components/WhatsAppFloat'
+import { ScrollToTop } from './components/ScrollToTop'
 import { BookPage } from './pages/BookPage'
 import { AboutPage } from './pages/AboutPage'
 import { AreasPage } from './pages/AreasPage'
@@ -33,7 +34,7 @@ function App() {
     location.pathname.startsWith('/portal') || location.pathname.startsWith('/admin') || location.pathname.startsWith('/customer')
 
   return (
-    <div className="bg-brand-slate text-slate-900">
+    <div className="bg-brand-slate font-sans text-brand-navy">
       {!isPortalRoute ? <Header /> : null}
       <main className={isPortalRoute ? 'w-full min-w-0' : undefined}>
         <Routes>
@@ -62,6 +63,7 @@ function App() {
       </main>
       {!isPortalRoute ? <Footer /> : null}
       {!isPortalRoute ? <WhatsAppFloat /> : null}
+      {!isPortalRoute ? <ScrollToTop /> : null}
       <Toaster position="top-right" richColors closeButton />
     </div>
   )
