@@ -5,6 +5,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import apiRoutes from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { isDbConnected } from './config/db.js'
 import { NODE_ENV } from './config/env.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -31,7 +32,11 @@ export function createApp() {
 
   /** Health check for load balancers / uptime */
   app.get('/health', (_req, res) => {
-    res.status(200).json({ ok: true, service: 'patio-cleaning-api' })
+    res.status(200).json({
+      ok: true,
+      service: 'patio-cleaning-api',
+      db: isDbConnected(),
+    })
   })
 
   /**

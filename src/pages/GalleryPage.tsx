@@ -99,7 +99,7 @@ export function GalleryPage() {
                     </div>
                   </div>
                   <figcaption className="absolute inset-x-0 bottom-0 z-10 p-4 sm:p-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-300/95">Project</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-accent">Project</p>
                     <p className="mt-2 text-lg font-semibold leading-snug text-white drop-shadow-sm">{item.title}</p>
                     {item.caption ? (
                       <p className="mt-1.5 text-sm leading-relaxed text-slate-200/95">{item.caption}</p>

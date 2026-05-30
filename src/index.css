@@ -3,9 +3,22 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  color: #0f172a;
-  background-color: #ffffff;
+  --color-primary: #1565c0; /* royal blue — main brand colour */
+  --color-primary-light: #1976d2; /* medium blue — hover states */
+  --color-accent: #42a5f5; /* electric/sky blue — highlights, water effect */
+  --color-accent-bright: #2196f3; /* bright blue — accents, badge text */
+  --color-navy: #0d1b3e; /* deep navy — backgrounds, dark sections */
+  --color-navy-mid: #0f2554; /* mid navy — cards, sections */
+  --color-white: #ffffff;
+  --color-off-white: #f0f6ff; /* blue-tinted white — light sections */
+  --color-text-muted: #90a4ae; /* muted blue-gray for body text on dark bg */
+  --color-text-dark: #0d1b3e; /* body text on light bg */
+  --color-amber: #f5a623;
+  --brand-gradient: linear-gradient(135deg, #0d1b3e 0%, #0f2554 40%, #1565c0 100%);
+
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--color-text-dark);
+  background-color: var(--color-off-white);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -15,44 +28,125 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background-color: #f3f5fa;
-  scroll-behavior: smooth;
+  background-color: var(--color-off-white);
+  font-size: 16px;
+  line-height: 1.7;
 }
 
 #root {
   min-height: 100vh;
 }
 
-.glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(14px);
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 }
 
-.fade-up {
-  opacity: 0;
-  transform: translateY(24px);
-  animation: fadeUp 0.8s ease-out forwards;
+@layer components {
+  .font-display {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  }
+
+  /* Small uppercase electric-blue section label */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  /* Glassmorphism surface used in hero + info card */
+  .glass-card {
+    background: rgba(13, 27, 62, 0.6);
+    border: 1px solid rgba(66, 165, 245, 0.25);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .glass-sub {
+    background: rgba(21, 101, 192, 0.15);
+    border: 1px solid rgba(66, 165, 245, 0.2);
+  }
+
+  /* Electric-blue gradient text */
+  .text-gradient-teal {
+    background: linear-gradient(135deg, #42a5f5 0%, #1565c0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
 }
 
-.fade-up-delay-1 {
-  animation-delay: 0.1s;
-}
+@layer utilities {
+  /* Animated dot-grid overlay for the hero */
+  .dot-grid-overlay {
+    background-image: radial-gradient(rgba(66, 165, 245, 0.16) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
 
-.fade-up-delay-2 {
-  animation-delay: 0.22s;
-}
+  /* Diagonal blue water-streak lines for the hero */
+  .water-streaks {
+    background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 2px,
+      transparent 2px,
+      transparent 22px
+    );
+  }
 
-.fade-up-delay-3 {
-  animation-delay: 0.34s;
-}
+  /* Soft electric-blue radial highlight */
+  .blue-radial {
+    background: radial-gradient(ellipse at 70% 50%, rgba(66, 165, 245, 0.15) 0%, transparent 70%);
+  }
 
-@keyframes fadeUp {
-  to {
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  }
+
+  /* Scroll-reveal: hidden until .is-visible is toggled by IntersectionObserver */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+
+  .reveal.is-visible {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .animate-pulse-ring,
+  .animate-scroll-wheel,
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
   }
 }
