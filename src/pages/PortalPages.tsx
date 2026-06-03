@@ -27,6 +27,8 @@ import {
   FiPlus,
 } from 'react-icons/fi'
 import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
+import { CustomerBookingModal } from '../components/booking/CustomerBookingModal'
+import { serviceOptions as bookingServiceOptions } from '../data/bookingData'
 import { services as serviceOptions } from '../data/siteData'
 
 type SidebarItem = {
@@ -3183,7 +3185,7 @@ export function CustomerBookingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
-  const [newServiceType, setNewServiceType] = useState(serviceOptions[0] ?? '')
+  const [newServiceType, setNewServiceType] = useState(bookingServiceOptions[0]?.name ?? '')
   const [newPreferredDate, setNewPreferredDate] = useState('')
   const [newArea, setNewArea] = useState('')
   const [newTimeSlot, setNewTimeSlot] = useState('')
@@ -3254,7 +3256,7 @@ export function CustomerBookingsPage() {
   }, [loadBookings, searchParams, setSearchParams])
 
   const openNewModal = () => {
-    setNewServiceType(serviceOptions[0] ?? '')
+    setNewServiceType(bookingServiceOptions[0]?.name ?? '')
     setNewPreferredDate('')
     setNewArea('')
     setNewTimeSlot('')
@@ -3357,99 +3359,23 @@ export function CustomerBookingsPage() {
         />
       )}
 
-      {showNewModal ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="new-booking-title"
-        >
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 id="new-booking-title" className="text-lg font-semibold text-slate-900">
-              New booking request
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">Continue to secure Stripe payment to confirm your slot.</p>
-            <div className="mt-4 grid gap-3">
-              <label>
-                <span className="mb-1 block text-sm text-slate-600">Service type</span>
-                <select
-                  value={newServiceType}
-                  onChange={(e) => setNewServiceType(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-400"
-                >
-                  {serviceOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span className="mb-1 block text-sm text-slate-600">Preferred date</span>
-                <input
-                  type="date"
-                  value={newPreferredDate}
-                  onChange={(e) => setNewPreferredDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-sm text-slate-600">Area / address (optional)</span>
-                <input
-                  type="text"
-                  value={newArea}
-                  onChange={(e) => setNewArea(e.target.value)}
-                  placeholder="e.g. Postcode or area"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-sm text-slate-600">Preferred time (optional)</span>
-                <input
-                  type="text"
-                  value={newTimeSlot}
-                  onChange={(e) => setNewTimeSlot(e.target.value)}
-                  placeholder="e.g. Morning, after 2pm"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-sm text-slate-600">Notes (optional)</span>
-                <textarea
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Access, parking, surface type…"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-                />
-              </label>
-            </div>
-            {submitError ? (
-              <p className="mt-3 text-sm text-rose-700" role="alert">
-                {submitError}
-              </p>
-            ) : null}
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowNewModal(false)}
-                disabled={submitBusy}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitNewBooking()}
-                disabled={submitBusy}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                {submitBusy ? 'Redirecting…' : 'Pay & confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <CustomerBookingModal
+        open={showNewModal}
+        serviceType={newServiceType}
+        preferredDate={newPreferredDate}
+        area={newArea}
+        timeSlot={newTimeSlot}
+        notes={newNotes}
+        submitBusy={submitBusy}
+        submitError={submitError}
+        onServiceTypeChange={setNewServiceType}
+        onPreferredDateChange={setNewPreferredDate}
+        onAreaChange={setNewArea}
+        onTimeSlotChange={setNewTimeSlot}
+        onNotesChange={setNewNotes}
+        onClose={() => setShowNewModal(false)}
+        onSubmit={() => void submitNewBooking()}
+      />
     </SidebarLayout>
   )
 }
