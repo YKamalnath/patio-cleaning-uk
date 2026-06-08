@@ -3,17 +3,17 @@ import { Reveal } from '../Reveal'
 
 const testimonials = [
   {
-    name: 'Sarah M., Bromley',
+    name: 'Sarah M., Didsbury',
     role: 'Homeowner',
     quote: 'They transformed our patio in one visit. It looks like a brand-new installation.',
   },
   {
-    name: 'David R., Croydon',
+    name: 'David R., Sale',
     role: 'Landlord',
     quote: 'Fast response, clear quote, and excellent final result. Great communication throughout.',
   },
   {
-    name: 'Anita L., Sutton',
+    name: 'Anita L., Stockport',
     role: 'Property Manager',
     quote: 'Professional, punctual, and spotless cleanup after the work. Highly recommended team.',
   },

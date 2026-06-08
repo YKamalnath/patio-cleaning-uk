@@ -2636,7 +2636,7 @@ export function AdminGalleryPage() {
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-                  placeholder="e.g. Patio after clean — Bromley"
+                  placeholder="e.g. Patio after clean — Didsbury"
                 />
               </label>
               <label>

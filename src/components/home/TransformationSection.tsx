@@ -1,6 +1,30 @@
+import { FaCheck } from 'react-icons/fa'
 import { Reveal } from '../Reveal'
+import { BeforeAfterSlider } from '../BeforeAfterSlider'
+import { useCountUp } from '../../hooks/useCountUp'
 
 const features = ['Eco-safe products', 'Commercial equipment', 'Insured professionals']
+
+type Stat = { end: number; decimals?: number; suffix?: string; label: string }
+
+const stats: Stat[] = [
+  { end: 2400, suffix: '+', label: 'Jobs completed' },
+  { end: 4.9, decimals: 1, label: 'Average rating' },
+  { end: 100, suffix: '%', label: 'Satisfaction' },
+]
+
+function StatItem({ end, decimals = 0, suffix = '', label }: Stat) {
+  const { ref, display } = useCountUp<HTMLParagraphElement>({ end, decimals })
+  return (
+    <div>
+      <p ref={ref} className="font-display text-3xl font-extrabold text-white sm:text-4xl">
+        {display}
+        <span className="text-brand-accent">{suffix}</span>
+      </p>
+      <p className="mt-1 text-sm text-brand-mutedBlue">{label}</p>
+    </div>
+  )
+}
 
 export function TransformationSection() {
   return (
@@ -18,54 +42,35 @@ export function TransformationSection() {
             See The Difference In One Visit
           </h2>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-brand-mutedBlue">
-            We remove deep dirt, moss, algae and black spot staining to deliver a cleaner, safer and more premium-looking outdoor space.
+            We remove deep dirt, moss, algae and black spot staining to deliver a cleaner, safer and more premium-looking outdoor space. Drag the slider to see the result.
           </p>
-          <div className="mt-7 flex flex-wrap gap-3">
+
+          <ul className="mt-7 space-y-3">
             {features.map((feature) => (
-              <span
-                key={feature}
-                className="rounded-full border border-brand-accent bg-brand-accent/10 px-4 py-2 text-sm font-semibold text-brand-accent"
-              >
-                {feature}
-              </span>
+              <li key={feature} className="flex items-center gap-3 text-white">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-primary text-white">
+                  <FaCheck className="h-3 w-3" />
+                </span>
+                <span className="font-medium">{feature}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-9 grid max-w-md grid-cols-3 gap-6 border-t border-white/10 pt-8">
+            {stats.map((stat) => (
+              <StatItem key={stat.label} {...stat} />
             ))}
           </div>
         </Reveal>
 
         <Reveal delay={120}>
-          <div className="grid grid-cols-2 gap-4">
-            <figure className="group relative overflow-hidden rounded-2xl">
-              <img
-                className="h-48 w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                src="https://images.unsplash.com/photo-1616486029423-aaa4789e8c9a?auto=format&fit=crop&w=900&q=80"
-                alt="Patio surface before cleaning"
-              />
-              <span className="absolute left-3 top-3 rounded-full bg-brand-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-                Before
-              </span>
-              <span className="absolute inset-0 bg-brand-primary/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-            </figure>
-            <figure className="group relative overflow-hidden rounded-2xl">
-              <img
-                className="h-48 w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                src="https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=900&q=80"
-                alt="Patio surface after cleaning"
-              />
-              <span className="absolute left-3 top-3 rounded-full bg-brand-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-                After
-              </span>
-              <span className="absolute inset-0 bg-brand-primary/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-            </figure>
-            <figure className="group relative col-span-2 overflow-hidden rounded-2xl">
-              <img
-                className="h-60 w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80"
-                alt="Premium finished patio"
-              />
-              <span className="absolute bottom-3 left-3 rounded-full bg-brand-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-                Finished Result
-              </span>
-            </figure>
+          <div className="relative">
+            <div className="pointer-events-none absolute -inset-4 rounded-[2rem] bg-brand-accent/10 blur-2xl" />
+            <BeforeAfterSlider
+              src="https://images.unsplash.com/photo-1774031159721-aec9230f38db?auto=format&fit=crop&w=1400&q=80"
+              alt="Patio surface restored by pressure washing"
+              className="relative h-72 shadow-blue-glow sm:h-96 lg:h-[460px]"
+            />
           </div>
         </Reveal>
       </div>

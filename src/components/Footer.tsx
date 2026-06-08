@@ -15,7 +15,7 @@ export function Footer() {
         <div>
           <BrandLogo imgClassName="h-12 w-12 object-contain" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-brand-mutedBlue">
-            Premium outdoor cleaning services trusted across South London and Surrey.
+            Premium outdoor cleaning services trusted across Manchester and surrounding areas.
           </p>
           <div className="mt-6 flex gap-3">
             <a href="#" aria-label="Facebook" className={socialClass}>

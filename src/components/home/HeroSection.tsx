@@ -1,58 +1,40 @@
-import { FaArrowRight, FaPhoneAlt, FaWhatsapp } from 'react-icons/fa'
+import { FaArrowRight, FaLeaf, FaPhoneAlt, FaShieldAlt, FaStar, FaWhatsapp } from 'react-icons/fa'
 import { FiChevronDown } from 'react-icons/fi'
 import { company } from '../../data/siteData'
-import { useCountUp } from '../../hooks/useCountUp'
 
-type Stat = {
-  prefix?: string
-  value: number
-  decimals?: number
-  suffix?: string
-  label: string
-}
-
-const stats: Stat[] = [
-  { value: 2400, suffix: '+', label: 'Projects Completed' },
-  { value: 4.9, decimals: 1, suffix: '/5', label: 'Average Review Score' },
-  { prefix: '< ', value: 30, suffix: ' min', label: 'Response Time' },
-  { value: 35, suffix: '+', label: 'Areas Covered' },
+const trustItems = [
+  { icon: FaShieldAlt, label: 'Fully insured' },
+  { icon: FaLeaf, label: 'Eco-safe products' },
 ]
-
-function StatItem({ stat }: { stat: Stat }) {
-  const { ref, display } = useCountUp<HTMLParagraphElement>({ end: stat.value, decimals: stat.decimals ?? 0 })
-  return (
-    <div className="glass-sub rounded-2xl p-4 sm:p-5">
-      <p ref={ref} className="font-display text-2xl font-extrabold text-brand-accent sm:text-3xl">
-        {stat.prefix}
-        {display}
-        {stat.suffix}
-      </p>
-      <p className="mt-1 text-xs font-medium text-brand-mutedBlue sm:text-sm">{stat.label}</p>
-    </div>
-  )
-}
 
 export function HeroSection() {
   return (
-    <section className="relative isolate -mt-[100px] flex min-h-[100svh] items-center overflow-hidden bg-brand-gradient">
-      {/* Radial highlight + diagonal water streaks + dot-grid + ambient glows */}
-      <div className="blue-radial pointer-events-none absolute inset-0" />
-      <div className="water-streaks pointer-events-none absolute inset-0" />
-      <div className="dot-grid-overlay pointer-events-none absolute inset-0 opacity-50 mask-fade-b" />
-      <div className="pointer-events-none absolute -left-32 top-20 h-96 w-96 rounded-full bg-brand-accent/20 blur-[120px]" />
-      <div className="pointer-events-none absolute -right-24 bottom-10 h-96 w-96 rounded-full bg-brand-primary/40 blur-[120px]" />
+    <section className="relative isolate -mt-[100px] flex min-h-[100svh] items-center overflow-hidden bg-brand-navy">
+      {/* Background image */}
+      <img
+        src="https://images.unsplash.com/photo-1707897283727-31befe824066?auto=format&fit=crop&w=2000&q=80"
+        alt="Professional pressure washing a driveway"
+        className="absolute inset-0 h-full w-full object-cover object-center"
+      />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col items-center gap-12 px-4 pb-16 pt-28 lg:flex-row lg:items-center lg:justify-between lg:gap-12 lg:py-0">
-        {/* Left — 55% */}
-        <div className="w-full lg:w-[55%]">
+      {/* Gradient + texture overlays for depth and legibility */}
+      <div className="absolute inset-0 bg-gradient-to-r from-brand-navy via-brand-navy/92 to-brand-navy/40" />
+      <div className="absolute inset-0 bg-gradient-to-t from-brand-navy via-transparent to-brand-navy/60" />
+      <div className="water-streaks pointer-events-none absolute inset-0 opacity-60" />
+      <div className="pointer-events-none absolute -left-32 top-24 h-96 w-96 rounded-full bg-brand-primary/30 blur-[130px]" />
+      <div className="pointer-events-none absolute -right-24 bottom-10 h-96 w-96 rounded-full bg-brand-accent/20 blur-[130px]" />
+
+      {/* Content */}
+      <div className="relative mx-auto w-full max-w-7xl px-4 pb-20 pt-28 lg:py-0">
+        <div className="max-w-2xl">
           <p className="section-label inline-flex items-center border-l-[3px] border-brand-primary pl-3 animate-fade-up">
             Premium Exterior Cleaning
           </p>
-          <h1 className="mt-6 font-display text-[2.75rem] font-black leading-[1.05] tracking-tight text-white animate-fade-up sm:text-6xl lg:text-[4.5rem]">
+          <h1 className="mt-6 font-display text-[2.75rem] font-black leading-[1.04] tracking-tight text-white animate-fade-up sm:text-6xl lg:text-[4.75rem]">
             Professional <span className="text-gradient-teal">Patio</span> Cleaning Services
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-brand-mutedBlue animate-fade-up">
-            Bring your patio back to life with expert pressure washing and deep outdoor cleaning. Fast, affordable, and reliable service across South London &amp; Surrey.
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-200 animate-fade-up">
+            Bring your patio back to life with expert pressure washing and deep outdoor cleaning. Fast, affordable, and reliable service across Manchester and the wider North West.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4 animate-fade-up">
@@ -69,30 +51,34 @@ export function HeroSection() {
             >
               <FaPhoneAlt className="h-4 w-4" /> Call Now
             </a>
+            <a
+              href={company.whatsappHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-whatsapp/60 px-5 py-3 text-sm font-semibold text-whatsapp transition-colors duration-200 hover:bg-whatsapp/10"
+            >
+              <FaWhatsapp className="h-4 w-4" /> WhatsApp
+            </a>
           </div>
 
-          <a
-            href={company.whatsappHref}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-5 inline-flex items-center gap-2 rounded-full border border-whatsapp/50 px-4 py-2 text-sm font-semibold text-whatsapp transition-colors duration-200 hover:bg-whatsapp/10 animate-fade-up"
-          >
-            <FaWhatsapp className="h-4 w-4" /> Message us on WhatsApp
-          </a>
-        </div>
-
-        {/* Right — 40% glass stats card */}
-        <div className="w-full max-w-md lg:max-w-none lg:w-[40%]">
-          <div className="glass-card rounded-3xl p-6 shadow-blue-glow sm:p-7 animate-fade-up">
-            <div className="grid grid-cols-2 gap-4">
-              {stats.map((stat) => (
-                <StatItem key={stat.label} stat={stat} />
-              ))}
+          {/* Trust row */}
+          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 animate-fade-up">
+            <div className="flex items-center gap-2">
+              <span className="flex gap-0.5 text-brand-amber">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <FaStar key={i} className="h-4 w-4" />
+                ))}
+              </span>
+              <span className="text-sm font-semibold text-white">
+                4.9/5 <span className="font-normal text-slate-300">· 2,400+ jobs</span>
+              </span>
             </div>
-            <div className="mt-6 rounded-2xl border border-brand-accent/20 bg-brand-primary/20 px-4 py-3 text-center text-sm font-medium text-white">
-              <span className="text-brand-accent">✓</span> Fully Insured{' '}
-              <span className="text-brand-accent">✓</span> Commercial-Grade Equipment
-            </div>
+            {trustItems.map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                <Icon className="h-4 w-4 text-brand-accent" />
+                {label}
+              </div>
+            ))}
           </div>
         </div>
       </div>

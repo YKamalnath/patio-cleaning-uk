@@ -1,10 +1,10 @@
 export const company = {
   name: 'Outdoor Cleaning Masters',
-  phoneDisplay: '020 3817 2644',
-  phoneHref: 'tel:+442038172644',
-  whatsappHref: 'https://wa.me/447700900321?text=Hi%20Outdoor%20Cleaning%20Masters%2C%20I%20would%20like%20a%20free%20quote.',
-  email: 'hello@elitepatiocare.co.uk',
-  address: '14 Oakfield Road, Croydon, London, CR0 2XN',
+  phoneDisplay: '07717 343875',
+  phoneHref: 'tel:+447717343875',
+  whatsappHref: 'https://wa.me/447717343875?text=Hi%20Outdoor%20Cleaning%20Masters%2C%20I%20would%20like%20a%20free%20quote.',
+  email: 'info@outdoorcleaningmasters.co.uk',
+  address: 'Flat 3 Ventry Court, 523 Barlow Moor Road, Chorlton, Manchester M21 8AQ',
 }
 
 export const navLinks = [
@@ -29,13 +29,16 @@ export const services = [
 ]
 
 export const areasCovered = [
-  'Croydon',
-  'Bromley',
-  'Sutton',
-  'Mitcham',
-  'Wimbledon',
-  'Richmond',
-  'Kingston',
-  'Epsom',
-  'Purley',
+  'Manchester',
+  'Salford',
+  'Stockport',
+  'Altrincham',
+  'Sale',
+  'Didsbury',
+  'Bolton',
+  'Bury',
+  'Wigan',
+  'Preston',
+  'Blackpool',
+  'Wilmslow',
 ]

@@ -135,7 +135,7 @@ export function CustomerBookingModal({
                     className={fieldClass}
                     value={area}
                     onChange={(e) => onAreaChange(e.target.value)}
-                    placeholder="e.g. CR0, Wimbledon, Sutton"
+                    placeholder="e.g. M21, Didsbury, Sale"
                     autoComplete="street-address"
                   />
                   <span className="text-xs text-slate-500">Helps us plan travel and equipment</span>
