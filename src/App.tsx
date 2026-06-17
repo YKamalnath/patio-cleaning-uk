@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { WhatsAppFloat } from './components/WhatsAppFloat'
 import { ScrollToTop } from './components/ScrollToTop'
+import { refreshScroll } from './lib/gsap'
 import { BookPage } from './pages/BookPage'
 import { AboutPage } from './pages/AboutPage'
 import { AreasPage } from './pages/AreasPage'
@@ -33,6 +35,16 @@ function App() {
   const location = useLocation()
   const isPortalRoute =
     location.pathname.startsWith('/portal') || location.pathname.startsWith('/admin') || location.pathname.startsWith('/customer')
+
+  useEffect(() => {
+    refreshScroll()
+    const t = setTimeout(refreshScroll, 300)
+    window.addEventListener('load', refreshScroll)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('load', refreshScroll)
+    }
+  }, [location.pathname, location.hash])
 
   return (
     <div className="bg-brand-slate font-sans text-brand-navy">

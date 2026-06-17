@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { FaArrowRight, FaLeaf, FaPhoneAlt, FaShieldAlt, FaStar, FaWhatsapp } from 'react-icons/fa'
 import { FiChevronDown } from 'react-icons/fi'
 import { company } from '../../data/siteData'
+import { gsap, useGSAP, prefersReducedMotion } from '../../lib/gsap'
 
 const trustItems = [
   { icon: FaShieldAlt, label: 'Fully insured' },
@@ -8,36 +10,79 @@ const trustItems = [
 ]
 
 export function HeroSection() {
+  const root = useRef<HTMLElement | null>(null)
+
+  useGSAP(
+    () => {
+      const el = root.current
+      if (!el) return
+
+      const staggerItems = el.querySelectorAll('[data-hero-stagger] > *')
+      const scrollCue = el.querySelector('[data-hero-scroll]')
+      const reduced = prefersReducedMotion()
+
+      if (reduced) {
+        gsap.set(staggerItems, { autoAlpha: 1, y: 0 })
+        if (scrollCue) gsap.set(scrollCue, { autoAlpha: 1, y: 0 })
+        return
+      }
+
+      gsap.set(staggerItems, { autoAlpha: 0, y: 72 })
+      if (scrollCue) gsap.set(scrollCue, { autoAlpha: 0, y: 16 })
+
+      gsap
+        .timeline({ defaults: { ease: 'power3.out' } })
+        .to(staggerItems, { autoAlpha: 1, y: 0, duration: 1.15, stagger: 0.14, delay: 0.2 })
+        .to(scrollCue, { autoAlpha: 1, y: 0, duration: 0.9 }, '-=0.35')
+
+      gsap.to(el.querySelector('[data-hero-bg]'), {
+        yPercent: -22,
+        scale: 1.06,
+        ease: 'none',
+        scrollTrigger: { trigger: el, start: 'top top', end: 'bottom top', scrub: 0.6 },
+      })
+
+      gsap.to(el.querySelectorAll('[data-hero-fade]'), {
+        autoAlpha: 0,
+        y: 80,
+        ease: 'none',
+        scrollTrigger: { trigger: el, start: 'top top', end: 'center top', scrub: 0.5 },
+      })
+    },
+    { scope: root },
+  )
+
   return (
-    <section className="relative isolate -mt-[100px] flex min-h-[100svh] items-center overflow-hidden bg-brand-navy">
-      {/* Background image */}
+    <section
+      ref={root}
+      className="relative isolate -mt-[100px] flex min-h-[100svh] items-center overflow-hidden bg-brand-navy"
+    >
       <img
+        data-hero-bg
         src="https://images.unsplash.com/photo-1707897283727-31befe824066?auto=format&fit=crop&w=2000&q=80"
         alt="Professional pressure washing a driveway"
-        className="absolute inset-0 h-full w-full object-cover object-center"
+        className="absolute inset-x-0 top-0 h-[130%] w-full object-cover object-center will-change-transform"
       />
 
-      {/* Gradient + texture overlays for depth and legibility */}
       <div className="absolute inset-0 bg-gradient-to-r from-brand-navy via-brand-navy/92 to-brand-navy/40" />
       <div className="absolute inset-0 bg-gradient-to-t from-brand-navy via-transparent to-brand-navy/60" />
       <div className="water-streaks pointer-events-none absolute inset-0 opacity-60" />
       <div className="pointer-events-none absolute -left-32 top-24 h-96 w-96 rounded-full bg-brand-primary/30 blur-[130px]" />
       <div className="pointer-events-none absolute -right-24 bottom-10 h-96 w-96 rounded-full bg-brand-accent/20 blur-[130px]" />
 
-      {/* Content */}
-      <div className="relative mx-auto w-full max-w-7xl px-4 pb-20 pt-28 lg:py-0">
-        <div className="max-w-2xl">
-          <p className="section-label inline-flex items-center border-l-[3px] border-brand-primary pl-3 animate-fade-up">
+      <div data-hero-fade className="relative mx-auto w-full max-w-7xl px-4 pb-20 pt-28 lg:py-0">
+        <div data-hero-stagger className="max-w-2xl">
+          <p className="section-label inline-flex items-center border-l-[3px] border-brand-primary pl-3">
             Premium Exterior Cleaning
           </p>
-          <h1 className="mt-6 font-display text-[2.75rem] font-black leading-[1.04] tracking-tight text-white animate-fade-up sm:text-6xl lg:text-[4.75rem]">
+          <h1 className="mt-6 font-display text-[2.75rem] font-black leading-[1.04] tracking-tight text-white sm:text-6xl lg:text-[4.75rem]">
             Professional <span className="text-gradient-teal">Patio</span> Cleaning Services
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-200 animate-fade-up">
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-200">
             Bring your patio back to life with expert pressure washing and deep outdoor cleaning. Fast, affordable, and reliable service across Manchester and the wider North West.
           </p>
 
-          <div className="mt-9 flex flex-wrap items-center gap-4 animate-fade-up">
+          <div className="mt-9 flex flex-wrap items-center gap-4">
             <a
               href="#quote"
               className="group inline-flex items-center gap-2 rounded-xl bg-brand-primary px-7 py-4 text-base font-bold text-white shadow-blue-btn transition-all duration-200 hover:bg-brand-primaryLight hover:shadow-[0_8px_25px_rgba(21,101,192,0.5)]"
@@ -61,8 +106,7 @@ export function HeroSection() {
             </a>
           </div>
 
-          {/* Trust row */}
-          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 animate-fade-up">
+          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3">
             <div className="flex items-center gap-2">
               <span className="flex gap-0.5 text-brand-amber">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -83,8 +127,9 @@ export function HeroSection() {
         </div>
       </div>
 
-      {/* Animated scroll indicator */}
       <a
+        data-hero-scroll
+        data-hero-fade
         href="#services"
         aria-label="Scroll to services"
         className="absolute bottom-6 left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5 text-brand-accent transition-opacity hover:opacity-80"

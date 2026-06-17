@@ -1,9 +1,11 @@
+import { useRef } from 'react'
 import type { IconType } from 'react-icons'
 import { FaArrowRight, FaCar, FaLeaf, FaRoad, FaSprayCan, FaThLarge } from 'react-icons/fa'
 import { GiWoodBeam, GiWoodenFence } from 'react-icons/gi'
 import { Link } from 'react-router-dom'
 import { services } from '../../data/siteData'
 import { Reveal } from '../Reveal'
+import { gsap, ScrollTrigger, useGSAP, prefersReducedMotion } from '../../lib/gsap'
 
 const serviceMeta: Record<string, { Icon: IconType; description: string }> = {
   'Patio Cleaning': {
@@ -37,6 +39,42 @@ const serviceMeta: Record<string, { Icon: IconType; description: string }> = {
 }
 
 export function ServicesSection() {
+  const grid = useRef<HTMLDivElement | null>(null)
+
+  useGSAP(
+    () => {
+      const gridEl = grid.current
+      if (!gridEl) return
+
+      const cards = gsap.utils.toArray<HTMLElement>('[data-service-card]', gridEl)
+      if (cards.length === 0) return
+
+      if (prefersReducedMotion()) {
+        gsap.set(cards, { autoAlpha: 1, y: 0, scale: 1 })
+        return
+      }
+
+      gsap.set(cards, { autoAlpha: 0, y: 80, scale: 0.92 })
+
+      ScrollTrigger.batch(cards, {
+        onEnter: (batch) => {
+          gsap.to(batch, {
+            autoAlpha: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.95,
+            stagger: 0.12,
+            ease: 'power3.out',
+            overwrite: true,
+          })
+        },
+        start: 'top 90%',
+        once: true,
+      })
+    },
+    { scope: grid },
+  )
+
   return (
     <section id="services" className="bg-brand-offwhite py-20 md:py-28">
       <div className="mx-auto max-w-7xl px-4">
@@ -58,27 +96,29 @@ export function ServicesSection() {
           </a>
         </Reveal>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((title, i) => {
+        <div ref={grid} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {services.map((title) => {
             const meta = serviceMeta[title]
             const Icon = meta?.Icon
             return (
-              <Reveal key={title} delay={(i % 3) * 90}>
-                <article className="group relative h-full overflow-hidden rounded-2xl border border-blue-50 bg-white p-7 shadow-card transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-2 hover:shadow-card-hover">
-                  <span className="absolute inset-x-0 top-0 h-[3px] origin-left scale-x-0 bg-gradient-to-r from-brand-primary to-brand-accent transition-transform duration-300 group-hover:scale-x-100" />
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-accent text-white shadow-blue-btn transition-transform duration-300 group-hover:scale-110">
-                    {Icon ? <Icon className="h-6 w-6" aria-hidden="true" /> : null}
-                  </div>
-                  <h3 className="mt-5 font-display text-xl font-bold text-brand-navy">{title}</h3>
-                  <p className="mt-2.5 leading-relaxed text-brand-muted">{meta?.description}</p>
-                  <Link
-                    to="/services"
-                    className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-primary transition-all duration-300 group-hover:gap-2.5"
-                  >
-                    Learn more <FaArrowRight className="h-3 w-3" />
-                  </Link>
-                </article>
-              </Reveal>
+              <article
+                key={title}
+                data-service-card
+                className="group relative h-full overflow-hidden rounded-2xl border border-blue-50 bg-white p-7 shadow-card transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-2 hover:shadow-card-hover"
+              >
+                <span className="absolute inset-x-0 top-0 h-[3px] origin-left scale-x-0 bg-gradient-to-r from-brand-primary to-brand-accent transition-transform duration-300 group-hover:scale-x-100" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-accent text-white shadow-blue-btn transition-transform duration-300 group-hover:scale-110">
+                  {Icon ? <Icon className="h-6 w-6" aria-hidden="true" /> : null}
+                </div>
+                <h3 className="mt-5 font-display text-xl font-bold text-brand-navy">{title}</h3>
+                <p className="mt-2.5 leading-relaxed text-brand-muted">{meta?.description}</p>
+                <Link
+                  to="/services"
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-primary transition-all duration-300 group-hover:gap-2.5"
+                >
+                  Learn more <FaArrowRight className="h-3 w-3" />
+                </Link>
+              </article>
             )
           })}
         </div>

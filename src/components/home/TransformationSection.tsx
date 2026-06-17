@@ -1,7 +1,9 @@
+import { useRef } from 'react'
 import { FaCheck } from 'react-icons/fa'
 import { Reveal } from '../Reveal'
 import { BeforeAfterSlider } from '../BeforeAfterSlider'
 import { useCountUp } from '../../hooks/useCountUp'
+import { gsap, useGSAP, prefersReducedMotion } from '../../lib/gsap'
 
 const features = ['Eco-safe products', 'Commercial equipment', 'Insured professionals']
 
@@ -27,8 +29,24 @@ function StatItem({ end, decimals = 0, suffix = '', label }: Stat) {
 }
 
 export function TransformationSection() {
+  const root = useRef<HTMLElement | null>(null)
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion() || !root.current) return
+      gsap.to('[data-transform-media]', {
+        yPercent: -14,
+        scale: 1.04,
+        ease: 'none',
+        scrollTrigger: { trigger: root.current, start: 'top bottom', end: 'bottom top', scrub: 0.6 },
+      })
+    },
+    { scope: root },
+  )
+
   return (
     <section
+      ref={root}
       className="relative -my-px bg-brand-navy py-28 md:py-36"
       style={{ clipPath: 'polygon(0 3vw, 100% 0, 100% calc(100% - 3vw), 0 100%)' }}
     >
@@ -36,7 +54,7 @@ export function TransformationSection() {
       <div className="pointer-events-none absolute right-0 top-1/3 h-80 w-80 rounded-full bg-brand-accent/15 blur-[120px]" />
 
       <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 lg:grid-cols-2">
-        <Reveal>
+        <Reveal variant="left">
           <p className="section-label">Transformation</p>
           <h2 className="mt-3 font-display text-3xl font-extrabold text-white sm:text-4xl md:text-5xl">
             See The Difference In One Visit
@@ -63,8 +81,8 @@ export function TransformationSection() {
           </div>
         </Reveal>
 
-        <Reveal delay={120}>
-          <div className="relative">
+        <Reveal variant="right" delay={120}>
+          <div data-transform-media className="relative">
             <div className="pointer-events-none absolute -inset-4 rounded-[2rem] bg-brand-accent/10 blur-2xl" />
             <BeforeAfterSlider
               src="https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=1400&q=80"
