@@ -1,6 +1,7 @@
 import type { IconType } from 'react-icons'
 import { FaArrowRight, FaCar, FaLeaf, FaRoad, FaSprayCan, FaThLarge } from 'react-icons/fa'
 import { GiWoodBeam, GiWoodenFence } from 'react-icons/gi'
+import { Link } from 'react-router-dom'
 import { services } from '../../data/siteData'
 import { Reveal } from '../Reveal'
 
@@ -70,9 +71,12 @@ export function ServicesSection() {
                   </div>
                   <h3 className="mt-5 font-display text-xl font-bold text-brand-navy">{title}</h3>
                   <p className="mt-2.5 leading-relaxed text-brand-muted">{meta?.description}</p>
-                  <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-primary transition-all duration-300 group-hover:gap-2.5">
+                  <Link
+                    to="/services"
+                    className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-primary transition-all duration-300 group-hover:gap-2.5"
+                  >
                     Learn more <FaArrowRight className="h-3 w-3" />
-                  </span>
+                  </Link>
                 </article>
               </Reveal>
             )

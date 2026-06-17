@@ -67,7 +67,7 @@ export function TransformationSection() {
           <div className="relative">
             <div className="pointer-events-none absolute -inset-4 rounded-[2rem] bg-brand-accent/10 blur-2xl" />
             <BeforeAfterSlider
-              src="https://images.unsplash.com/photo-1774031159721-aec9230f38db?auto=format&fit=crop&w=1400&q=80"
+              src="https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=1400&q=80"
               alt="Patio surface restored by pressure washing"
               className="relative h-72 shadow-blue-glow sm:h-96 lg:h-[460px]"
             />

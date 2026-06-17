@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { body, query } from 'express-validator'
 import * as bookingController from '../controllers/booking.controller.js'
 import * as galleryController from '../controllers/gallery.controller.js'
+import * as quoteController from '../controllers/quote.controller.js'
 import { validateRequest } from '../middleware/validate.js'
 
 const router = Router()
@@ -11,6 +12,24 @@ const router = Router()
  * GET /api/public/gallery
  */
 router.get('/gallery', galleryController.listPublishedGallery)
+
+/**
+ * Guest quote requests from the marketing site contact form (no auth).
+ * POST /api/public/quotes
+ */
+router.post(
+  '/quotes',
+  [
+    body('contactName').trim().notEmpty(),
+    body('email').isEmail().normalizeEmail(),
+    body('phone').trim().notEmpty(),
+    body('address').trim().notEmpty(),
+    body('service').trim().notEmpty(),
+    body('message').optional().trim(),
+  ],
+  validateRequest,
+  quoteController.createGuestQuote,
+)
 
 /**
  * Guest bookings (no account) — Stripe Checkout then return URLs on /book.

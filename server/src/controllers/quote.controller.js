@@ -1,6 +1,34 @@
 import { Quote } from '../models/Quote.js'
+import { isDbConnected } from '../config/db.js'
 import { sendError, sendSuccess } from '../utils/response.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
+
+/**
+ * Public marketing site — guest quote request (no account).
+ */
+export const createGuestQuote = asyncHandler(async (req, res) => {
+  if (!isDbConnected()) {
+    return sendError(res, {
+      message: 'Quote service is temporarily unavailable. Please call us directly.',
+      statusCode: 503,
+    })
+  }
+
+  const quote = await Quote.create({
+    contactName: req.body.contactName,
+    email: req.body.email,
+    phone: req.body.phone,
+    postcode: req.body.address,
+    serviceSummary: req.body.service,
+    message: req.body.message,
+  })
+
+  return sendSuccess(res, {
+    message: 'Quote request submitted',
+    statusCode: 201,
+    data: { quote },
+  })
+})
 
 /**
  * Customer: request a quote.

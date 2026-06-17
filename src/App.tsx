@@ -10,6 +10,7 @@ import { AreasPage } from './pages/AreasPage'
 import { ContactPage } from './pages/ContactPage'
 import { GalleryPage } from './pages/GalleryPage'
 import { HomePage } from './pages/HomePage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import {
   AdminBookingsPage,
   AdminCustomersPage,
@@ -59,6 +60,7 @@ function App() {
           <Route path="/customer/bookings" element={<CustomerBookingsPage />} />
           <Route path="/customer/quotes" element={<CustomerQuotesPage />} />
           <Route path="/customer/settings" element={<CustomerSettingsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
       {!isPortalRoute ? <Footer /> : null}

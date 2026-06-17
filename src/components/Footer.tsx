@@ -18,10 +18,12 @@ export function Footer() {
             Premium outdoor cleaning services trusted across Manchester and surrounding areas.
           </p>
           <div className="mt-6 flex gap-3">
-            <a href="#" aria-label="Facebook" className={socialClass}>
+            {/* TODO: Replace with real social media URLs */}
+            <a href="#" onClick={(e) => e.preventDefault()} aria-label="Facebook" className={socialClass}>
               <FiFacebook className="h-4 w-4" />
             </a>
-            <a href="#" aria-label="Instagram" className={socialClass}>
+            {/* TODO: Replace with real social media URLs */}
+            <a href="#" onClick={(e) => e.preventDefault()} aria-label="Instagram" className={socialClass}>
               <FiInstagram className="h-4 w-4" />
             </a>
             <a href={`mailto:${company.email}`} aria-label="Email" className={socialClass}>

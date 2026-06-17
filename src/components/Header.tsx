@@ -44,7 +44,7 @@ export function Header() {
             <BrandLogo />
           </Link>
 
-          <nav className="hidden items-center gap-7 lg:flex">
+          <nav className="hidden items-center gap-7 md:flex">
             {navLinks.map((link, i) => (
               <NavLink
                 key={link.path}
@@ -75,7 +75,7 @@ export function Header() {
 
           <button
             onClick={() => setOpen((prev) => !prev)}
-            className="text-white lg:hidden"
+            className="text-white md:hidden"
             aria-label="Toggle menu"
             aria-expanded={open}
           >
@@ -85,7 +85,7 @@ export function Header() {
 
         {/* Mobile slide-down drawer */}
         <div
-          className={`overflow-hidden border-t border-white/10 bg-brand-navy/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 lg:hidden ${
+          className={`overflow-hidden border-t border-white/10 bg-brand-navy/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${
             open ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >

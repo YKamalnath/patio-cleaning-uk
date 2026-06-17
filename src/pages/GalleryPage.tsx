@@ -9,6 +9,60 @@ type PublicGalleryItem = {
   caption?: string
 }
 
+// Fallback gallery shown when the CMS/API has no published items or is unavailable,
+// so the page is never blank or stuck loading in production.
+// TODO: Replace these placeholder images with real before/after job photos via the admin gallery.
+const FALLBACK_GALLERY: PublicGalleryItem[] = [
+  {
+    _id: 'fallback-1',
+    title: 'Patio Restoration',
+    imageUrl: 'https://images.unsplash.com/photo-1558904541-efa843a96f01?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Moss and algae lifted from a sandstone patio.',
+  },
+  {
+    _id: 'fallback-2',
+    title: 'Driveway Clean',
+    imageUrl: 'https://images.unsplash.com/photo-1591389703635-e15a07b842d7?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Block-paved driveway restored to a like-new finish.',
+  },
+  {
+    _id: 'fallback-3',
+    title: 'Pressure Washing',
+    imageUrl: 'https://images.unsplash.com/photo-1583845112203-29329902332e?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Ground-in dirt blasted from paving slabs.',
+  },
+  {
+    _id: 'fallback-4',
+    title: 'Pathway Refresh',
+    imageUrl: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Slip-safe garden path cleared of weeds and grime.',
+  },
+  {
+    _id: 'fallback-5',
+    title: 'Decking Revival',
+    imageUrl: 'https://images.unsplash.com/photo-1591825729269-caeb344f6df2?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Timber decking gently cleaned and brightened.',
+  },
+  {
+    _id: 'fallback-6',
+    title: 'Patio Slabs',
+    imageUrl: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=1000&q=80',
+    caption: 'A spotless finish across a residential patio.',
+  },
+  {
+    _id: 'fallback-7',
+    title: 'Front Path Clean',
+    imageUrl: 'https://images.unsplash.com/photo-1576941089067-2de3c901e126?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Brighter, safer entrance after a deep clean.',
+  },
+  {
+    _id: 'fallback-8',
+    title: 'Garden Paving',
+    imageUrl: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1000&q=80',
+    caption: 'Outdoor paving transformed in a single visit.',
+  },
+]
+
 function mediaSrc(pathOrUrl: string): string {
   if (!pathOrUrl) return ''
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl
@@ -28,12 +82,19 @@ export function GalleryPage() {
       setError(null)
       try {
         const res = await apiGetPublic<{ items: PublicGalleryItem[] }>('/api/public/gallery')
-        if (!cancelled) setItems(res.data.items ?? [])
+        const fetched = res.data.items ?? []
+        // Use real published items when available; otherwise show placeholders so the page is never blank.
+        if (!cancelled) setItems(fetched.length > 0 ? fetched : FALLBACK_GALLERY)
       } catch (err) {
+        // API/CMS unavailable — fall back to placeholder images instead of an endless skeleton.
         if (!cancelled) {
-          const msg = err instanceof ApiError ? err.message : 'Could not load gallery.'
-          setError(msg)
-          setItems([])
+          if (err instanceof ApiError && err.status >= 500) {
+            // Unexpected server failure: still keep the page populated for visitors.
+            setItems(FALLBACK_GALLERY)
+          } else {
+            setError(err instanceof ApiError ? err.message : 'Could not load gallery.')
+            setItems(FALLBACK_GALLERY)
+          }
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -59,7 +120,7 @@ export function GalleryPage() {
               </div>
             ))}
           </div>
-        ) : error ? (
+        ) : error && items.length === 0 ? (
           <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-center text-sm text-rose-800" role="alert">
             {error}
           </p>
