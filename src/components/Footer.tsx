@@ -11,7 +11,7 @@ export function Footer() {
   return (
     <footer className="relative bg-brand-navy text-brand-mutedBlue">
       <div className="h-px w-full bg-gradient-to-r from-transparent via-brand-primary to-transparent" />
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-16 md:grid-cols-3">
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-16 md:grid-cols-2 lg:grid-cols-3">
         <div>
           <BrandLogo imgClassName="h-12 w-12 object-contain" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-brand-mutedBlue">
@@ -54,15 +54,15 @@ export function Footer() {
                 {company.phoneDisplay}
               </a>
             </li>
-            <li className="flex items-center gap-3">
+            <li className="flex min-w-0 items-center gap-3">
               <FiMail className="h-4 w-4 shrink-0 text-brand-accent" />
-              <a href={`mailto:${company.email}`} className="transition-colors hover:text-brand-accent">
+              <a href={`mailto:${company.email}`} className="min-w-0 break-words transition-colors hover:text-brand-accent">
                 {company.email}
               </a>
             </li>
-            <li className="flex items-start gap-3">
+            <li className="flex min-w-0 items-start gap-3">
               <FaMapMarkerAlt className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent" />
-              <span className="text-brand-mutedBlue">{company.address}</span>
+              <span className="min-w-0 break-words text-brand-mutedBlue">{company.address}</span>
             </li>
           </ul>
         </div>
